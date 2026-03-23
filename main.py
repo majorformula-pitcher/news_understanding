@@ -7,66 +7,50 @@ import re
 import xml.etree.ElementTree as ET
 from bs4 import BeautifulSoup
 from jinja2 import Template
-from google import genai
+import anthropic
 
 app = FastAPI()
 
-# Configure Gemini using environment variable
-GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
+# Configure Claude API using environment variable
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 
-# 최신 google-genai 클라이언트 초기화
-if GOOGLE_API_KEY:
-    # v1 API를 명시적으로 사용하여 1.5 모델의 404 오류를 방지합니다.
-    client = genai.Client(
-        api_key=GOOGLE_API_KEY,
-        http_options={'api_version': 'v1'}
-    )
+if ANTHROPIC_API_KEY:
+    client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
 else:
-    print("Warning: GOOGLE_API_KEY environment variable is not set.")
+    print("Warning: ANTHROPIC_API_KEY environment variable is not set.")
     client = None
 
 async def summarize_article(title, body):
-    if not GOOGLE_API_KEY or not client:
-        return "⚠️ API 키가 설정되지 않았습니다. Render.com 설정에서 GOOGLE_API_KEY를 추가해주세요."
-    
+    if not ANTHROPIC_API_KEY or not client:
+        return "⚠️ API 키가 설정되지 않았습니다. Render.com 설정에서 ANTHROPIC_API_KEY를 추가해주세요."
+
     if not body or body == "Content not found" or len(body) < 100:
         return "요약할 충분한 본문 내용이 없습니다."
-    
-    prompt = f"""
-    당신은 뉴스 요약 전문가입니다. 다음 뉴스 기사를 읽고 아래 형식에 정확히 맞춰 요약해 주세요.
-    
-    형식:
-    [기사 제목 1줄]
-    . 핵심 요약 첫 번째 줄 (2줄 이내)
-    . 핵심 요약 두 번째 줄 (2줄 이내)
-    
-    주의사항:
-    - 반드시 '.'으로 시작하는 2개의 문장으로 요약하세요.
-    - 불필요한 설명 없이 핵심만 전달하세요.
-    
-    기사 제목: {title}
-    기사 본문: {body}
-    """
-    
+
+    prompt = f"""다음 뉴스 기사를 읽고 아래 형식에 정확히 맞춰 요약해 주세요.
+
+형식:
+[기사 제목 1줄]
+. 핵심 요약 첫 번째 줄 (2줄 이내)
+. 핵심 요약 두 번째 줄 (2줄 이내)
+
+주의사항:
+- 반드시 '.'으로 시작하는 2개의 문장으로 요약하세요.
+- 불필요한 설명 없이 핵심만 전달하세요.
+
+기사 제목: {title}
+기사 본문: {body}"""
+
     try:
-        # 1. 할당량이 넉넉한 gemini-1.5-flash 모델을 먼저 시도합니다.
-        response = await client.aio.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=prompt
+        response = await client.messages.create(
+            model="claude-sonnet-4-6-20250514",
+            max_tokens=1024,
+            system="당신은 뉴스 요약 전문가입니다.",
+            messages=[{"role": "user", "content": prompt}]
         )
-        return response.text.strip()
+        return response.content[0].text.strip()
     except Exception as e:
-        print(f"Error summarizing with 1.5-flash: {e}")
-        # 2. 실패 시 2.0-flash 시도 (현재 429 발생 가능성 높음)
-        try:
-            print("Trying with gemini-2.0-flash as fallback...")
-            response = await client.aio.models.generate_content(
-                model="gemini-2.0-flash",
-                contents=prompt
-            )
-            return response.text.strip()
-        except Exception as e2:
-            return f"요약 중 오류가 발생했습니다. (1.5-Flash 에러: {str(e)}, 2.0-Flash 에러: {str(e2)})"
+        return f"요약 중 오류가 발생했습니다: {str(e)}"
 
 async def get_news_content(url):
     headers = {
