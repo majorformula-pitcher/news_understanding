@@ -14,8 +14,8 @@ app = FastAPI()
 # Configure Gemini using environment variable
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 if GOOGLE_API_KEY:
-    # v1 API를 명시적으로 사용하도록 설정
-    genai.configure(api_key=GOOGLE_API_KEY, transport='rest', client_options={'api_version': 'v1'})
+    # 기본 설정 사용 (v1beta가 기본값인 경우가 많으나, 1.5 모델은 v1beta에서도 지원됨)
+    genai.configure(api_key=GOOGLE_API_KEY, transport='rest')
 else:
     print("Warning: GOOGLE_API_KEY environment variable is not set.")
 
