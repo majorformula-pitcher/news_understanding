@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse
 import httpx
@@ -10,10 +11,17 @@ import google.generativeai as genai
 
 app = FastAPI()
 
-# Configure Gemini
-genai.configure(api_key="AIzaSyDe87gfo_DP_u6742aV993S1dxh6eyuki8")
+# Configure Gemini using environment variable
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
+if GOOGLE_API_KEY:
+    genai.configure(api_key=GOOGLE_API_KEY)
+else:
+    print("Warning: GOOGLE_API_KEY environment variable is not set.")
 
 async def summarize_article(title, body):
+    if not GOOGLE_API_KEY:
+        return "API 키가 설정되지 않아 요약을 생성할 수 없습니다."
+    
     if not body or body == "Content not found" or len(body) < 100:
         return None
     
