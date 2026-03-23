@@ -6,8 +6,38 @@ import re
 import xml.etree.ElementTree as ET
 from bs4 import BeautifulSoup
 from jinja2 import Template
+import google.generativeai as genai
 
 app = FastAPI()
+
+# Configure Gemini
+genai.configure(api_key="AIzaSyDe87gfo_DP_u6742aV993S1dxh6eyuki8")
+
+async def summarize_article(title, body):
+    if not body or body == "Content not found" or len(body) < 100:
+        return None
+    
+    try:
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        prompt = f"""
+        당신은 뉴스 요약 전문가입니다. 다음 뉴스 기사를 읽고 아래 형식에 맞춰 요약해 주세요.
+        기사 제목을 먼저 쓰고, 그 아래에 핵심 내용을 딱 2줄로 요약해야 합니다.
+        각 요약 줄은 '.'으로 시작해야 합니다.
+        
+        형식 예시:
+        [기사 제목]
+        . 요약 내용 첫 번째 줄
+        . 요약 내용 두 번째 줄
+        
+        기사 제목: {title}
+        기사 본문: {body}
+        """
+        
+        response = await asyncio.to_thread(model.generate_content, prompt)
+        return response.text.strip()
+    except Exception as e:
+        print(f"Error summarizing: {e}")
+        return None
 
 async def get_news_content(url):
     # Set User-Agent to avoid being blocked
@@ -85,13 +115,20 @@ async def parse_rss_and_fetch_news(rss_url):
             if link_elem is not None and link_elem.text:
                 links.append(link_elem.text)
                 
-        # To avoid extremely long processing times, we fetch them one by one.
-        for link in links[:10]: # Limit to 10 articles to stay within Worker limits if necessary
-            title, body = await get_news_content(link)
+        # To avoid extremely long processing times, we fetch them in parallel.
+        fetch_tasks = [get_news_content(link) for link in links[:10]]
+        fetched_results = await asyncio.gather(*fetch_tasks)
+        
+        # Then summarize them in parallel
+        summary_tasks = [summarize_article(title, body) for title, body in fetched_results]
+        summaries = await asyncio.gather(*summary_tasks)
+        
+        for (title, body), summary, link in zip(fetched_results, summaries, links[:10]):
             articles.append({
                 'title': title,
                 'body': body,
-                'link': link
+                'link': link,
+                'summary': summary
             })
             
     except Exception as e:
@@ -106,42 +143,61 @@ HTML_TEMPLATE = """
     <meta charset="utf-8">
     <title>뉴스 기사 추출기</title>
     <style>
-        body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-        .form-group { margin-bottom: 20px; display: flex; gap: 10px; }
-        input[type="text"] { flex-grow: 1; padding: 10px; box-sizing: border-box; font-size: 16px; }
-        button { padding: 10px 20px; background-color: #007bff; color: white; border: none; cursor: pointer; font-size: 16px; white-space: nowrap; }
-        .result { margin-top: 30px; border-top: 1px solid #ccc; padding-top: 20px; }
-        .result h2 { margin-bottom: 10px; }
-        .result h2 a { color: #007bff; text-decoration: none; }
-        .result h2 a:hover { text-decoration: underline; }
-        .body-text { white-space: pre-wrap; line-height: 1.6; font-size: 16px; color: #333; }
-        .original-link { margin-top: 15px; display: inline-block; color: #666; font-size: 14px; text-decoration: none; border: 1px solid #ccc; padding: 5px 10px; border-radius: 4px; }
+        body { font-family: sans-serif; max-width: 1000px; margin: 0 auto; padding: 20px; background-color: #f8f9fa; }
+        h1 { text-align: center; color: #333; }
+        .form-group { margin-bottom: 20px; display: flex; gap: 10px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        input[type="text"] { flex-grow: 1; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px; }
+        button { padding: 12px 24px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; white-space: nowrap; font-weight: bold; }
+        button:hover { background-color: #0056b3; }
+        .result { margin-top: 30px; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .result h2 { margin-top: 0; margin-bottom: 15px; font-size: 24px; }
+        .result h2 a { color: #333; text-decoration: none; }
+        .result h2 a:hover { color: #007bff; }
+        
+        .article-container { display: flex; gap: 25px; margin-top: 20px; flex-wrap: wrap; }
+        .body-text { flex: 3; min-width: 300px; white-space: pre-wrap; line-height: 1.8; font-size: 16px; color: #444; }
+        .summary-box { flex: 1.2; min-width: 250px; background-color: #ebf5ff; border: 1px solid #b3d7ff; padding: 20px; border-radius: 10px; height: fit-content; position: sticky; top: 20px; }
+        .summary-box h3 { margin-top: 0; font-size: 18px; color: #0056b3; border-bottom: 2px solid #b3d7ff; padding-bottom: 10px; margin-bottom: 15px; }
+        .summary-content { font-size: 15px; line-height: 1.6; color: #2c3e50; font-weight: 500; white-space: pre-wrap; }
+        
+        .original-link { margin-top: 20px; display: inline-block; color: #666; font-size: 14px; text-decoration: none; border: 1px solid #ccc; padding: 8px 16px; border-radius: 4px; }
         .original-link:hover { background-color: #f8f9fa; color: #007bff; border-color: #007bff; }
-        .error { color: red; margin-top: 20px; }
-        .loading { display: none; margin-top: 20px; font-weight: bold; color: #007bff; }
+        .error { color: #dc3545; background: #f8d7da; padding: 15px; border-radius: 4px; margin-top: 20px; }
+        .loading { display: none; text-align: center; margin-top: 20px; font-weight: bold; color: #007bff; }
     </style>
 </head>
 <body>
-    <h1>뉴스 기사 추출기 (RSS 지원)</h1>
+    <h1>뉴스 기사 추출 및 요약 (Gemini AI)</h1>
     <form method="POST" onsubmit="document.getElementById('loading').style.display='block';">
         <div class="form-group">
-            <input type="text" name="url" placeholder="뉴스 URL 또는 RSS URL(예: https://rss.etnews.com/04046.xml)을 입력하세요" value="{{ url or 'https://rss.etnews.com/04046.xml' }}" required>
-            <button type="submit">추출하기</button>
+            <input type="text" name="url" placeholder="뉴스 URL 또는 RSS URL을 입력하세요" value="{{ url or 'https://rss.etnews.com/04046.xml' }}" required>
+            <button type="submit">추출 및 요약하기</button>
         </div>
     </form>
     
-    <div id="loading" class="loading">기사를 불러오는 중입니다. 잠시만 기다려주세요...</div>
+    <div id="loading" class="loading">AI가 기사를 분석하고 요약 중입니다. 잠시만 기다려주세요...</div>
 
     {% if error %}
     <div class="error">{{ error }}</div>
     {% endif %}
 
     {% if articles %}
-        <p>총 {{ articles|length }}개의 기사를 가져왔습니다.</p>
+        <p style="text-align: right; color: #666;">총 {{ articles|length }}개의 기사를 가져왔습니다.</p>
         {% for article in articles %}
         <div class="result">
             <h2><a href="{{ article.link }}" target="_blank" rel="noopener noreferrer">{{ article.title }}</a></h2>
-            <div class="body-text">{{ article.body }}</div>
+            
+            <div class="article-container">
+                <div class="body-text">{{ article.body }}</div>
+                
+                {% if article.summary %}
+                <div class="summary-box">
+                    <h3>Gemini AI 요약</h3>
+                    <div class="summary-content">{{ article.summary }}</div>
+                </div>
+                {% endif %}
+            </div>
+            
             <a href="{{ article.link }}" target="_blank" rel="noopener noreferrer" class="original-link">원문 기사 보기 →</a>
         </div>
         {% endfor %}
@@ -177,7 +233,8 @@ async def post_index(request: Request):
             if title.startswith("An error occurred:"):
                 error = title
             else:
-                articles = [{'title': title, 'body': body, 'link': url}]
+                summary = await summarize_article(title, body)
+                articles = [{'title': title, 'body': body, 'link': url, 'summary': summary}]
             
     template = Template(HTML_TEMPLATE)
     html_content = template.render(url=url, articles=articles, error=error)
