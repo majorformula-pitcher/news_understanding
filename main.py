@@ -43,7 +43,7 @@ async def summarize_article(title, body):
 
     try:
         response = await client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+            model="claude-haiku-4-5-20251001",
             max_tokens=1024,
             system="당신은 뉴스 요약 전문가입니다.",
             messages=[{"role": "user", "content": prompt}]
