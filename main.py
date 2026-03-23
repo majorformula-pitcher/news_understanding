@@ -15,14 +15,9 @@ app = FastAPI()
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 
 # 최신 google-genai 클라이언트 초기화
-# v1 API를 기본으로 사용하도록 설정
 if GOOGLE_API_KEY:
-    # google-genai 라이브러리는 http_options를 통해 api_version을 설정합니다.
-    # v1을 명시하여 v1beta에서의 404 오류를 방지합니다.
-    client = genai.Client(
-        api_key=GOOGLE_API_KEY,
-        http_options={'api_version': 'v1'}
-    )
+    # 설정을 최소화하여 SDK가 가장 호환성 높은 엔드포인트를 자동으로 선택하게 합니다.
+    client = genai.Client(api_key=GOOGLE_API_KEY)
 else:
     print("Warning: GOOGLE_API_KEY environment variable is not set.")
     client = None
@@ -51,25 +46,24 @@ async def summarize_article(title, body):
     """
     
     try:
-        # 비동기 방식으로 호출 (client.aio.models.generate_content)
-        # 1.5-flash 모델 시도
+        # 1. 가장 최신이자 안정적인 gemini-2.0-flash 모델 시도
         response = await client.aio.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-2.0-flash",
             contents=prompt
         )
         return response.text.strip()
     except Exception as e:
-        print(f"Error summarizing with flash: {e}")
-        # fallback: 1.5-pro 모델로 시도
+        print(f"Error summarizing with 2.0-flash: {e}")
+        # 2. 실패 시 1.5-flash로 fallback
         try:
-            print("Trying with gemini-1.5-pro as fallback...")
+            print("Trying with gemini-1.5-flash as fallback...")
             response = await client.aio.models.generate_content(
-                model="gemini-1.5-pro",
+                model="gemini-1.5-flash",
                 contents=prompt
             )
             return response.text.strip()
         except Exception as e2:
-            return f"요약 중 오류가 발생했습니다. (Flash 에러: {str(e)}, Pro 에러: {str(e2)})"
+            return f"요약 중 오류가 발생했습니다. (2.0-Flash 에러: {str(e)}, 1.5-Flash 에러: {str(e2)})"
 
 async def get_news_content(url):
     headers = {
