@@ -26,8 +26,9 @@ async def summarize_article(title, body):
         return "요약할 충분한 본문 내용이 없습니다."
     
     try:
-        # gemini-1.5-flash 모델을 명시적으로 사용
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        # 모델명에 models/ 를 붙여 더 명시적으로 지정
+        model_name = "models/gemini-1.5-flash"
+        model = genai.GenerativeModel(model_name)
         
         prompt = f"""
         당신은 뉴스 요약 전문가입니다. 다음 뉴스 기사를 읽고 아래 형식에 정확히 맞춰 요약해 주세요.
@@ -48,15 +49,15 @@ async def summarize_article(title, body):
         response = await asyncio.to_thread(model.generate_content, prompt)
         return response.text.strip()
     except Exception as e:
-        print(f"Error summarizing: {e}")
-        # 404 에러나 모델 관련 에러 발생 시 다른 모델로 재시도 (fallback)
+        print(f"Error summarizing with flash: {e}")
+        # flash 가 안될 경우 pro 모델로 명시적으로 시도
         try:
-            print("Trying with gemini-pro as fallback...")
-            model = genai.GenerativeModel("gemini-pro")
+            print("Trying with models/gemini-pro as fallback...")
+            model = genai.GenerativeModel("models/gemini-pro")
             response = await asyncio.to_thread(model.generate_content, prompt)
             return response.text.strip()
         except Exception as e2:
-            return f"요약 중 오류가 발생했습니다: {str(e)}. (재시도 중: {str(e2)})"
+            return f"요약 중 오류가 발생했습니다. 라이브러리 버전이나 API 키를 확인해주세요. (Flash 에러: {str(e)}, Pro 에러: {str(e2)})"
 
 async def get_news_content(url):
     headers = {
