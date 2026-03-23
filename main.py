@@ -14,7 +14,8 @@ app = FastAPI()
 # Configure Gemini using environment variable
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 if GOOGLE_API_KEY:
-    genai.configure(api_key=GOOGLE_API_KEY)
+    # v1 API를 명시적으로 사용하도록 설정
+    genai.configure(api_key=GOOGLE_API_KEY, transport='rest', api_version='v1')
 else:
     print("Warning: GOOGLE_API_KEY environment variable is not set.")
 
@@ -26,8 +27,8 @@ async def summarize_article(title, body):
         return "요약할 충분한 본문 내용이 없습니다."
     
     try:
-        # 모델명에 models/ 를 붙여 더 명시적으로 지정
-        model_name = "models/gemini-1.5-flash"
+        # 모델명에서 models/ 를 제거하고 표준 모델명 사용
+        model_name = "gemini-1.5-flash"
         model = genai.GenerativeModel(model_name)
         
         prompt = f"""
@@ -50,10 +51,10 @@ async def summarize_article(title, body):
         return response.text.strip()
     except Exception as e:
         print(f"Error summarizing with flash: {e}")
-        # flash 가 안될 경우 pro 모델로 명시적으로 시도
+        # flash 가 안될 경우 pro 모델로 시도 (gemini-pro 대신 gemini-1.5-pro 사용)
         try:
-            print("Trying with models/gemini-pro as fallback...")
-            model = genai.GenerativeModel("models/gemini-pro")
+            print("Trying with gemini-1.5-pro as fallback...")
+            model = genai.GenerativeModel("gemini-1.5-pro")
             response = await asyncio.to_thread(model.generate_content, prompt)
             return response.text.strip()
         except Exception as e2:
