@@ -16,8 +16,11 @@ GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 
 # 최신 google-genai 클라이언트 초기화
 if GOOGLE_API_KEY:
-    # 설정을 최소화하여 SDK가 가장 호환성 높은 엔드포인트를 자동으로 선택하게 합니다.
-    client = genai.Client(api_key=GOOGLE_API_KEY)
+    # v1 API를 명시적으로 사용하여 1.5 모델의 404 오류를 방지합니다.
+    client = genai.Client(
+        api_key=GOOGLE_API_KEY,
+        http_options={'api_version': 'v1'}
+    )
 else:
     print("Warning: GOOGLE_API_KEY environment variable is not set.")
     client = None
@@ -46,24 +49,24 @@ async def summarize_article(title, body):
     """
     
     try:
-        # 1. 가장 최신이자 안정적인 gemini-2.0-flash 모델 시도
+        # 1. 할당량이 넉넉한 gemini-1.5-flash 모델을 먼저 시도합니다.
         response = await client.aio.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-1.5-flash",
             contents=prompt
         )
         return response.text.strip()
     except Exception as e:
-        print(f"Error summarizing with 2.0-flash: {e}")
-        # 2. 실패 시 1.5-flash로 fallback
+        print(f"Error summarizing with 1.5-flash: {e}")
+        # 2. 실패 시 2.0-flash 시도 (현재 429 발생 가능성 높음)
         try:
-            print("Trying with gemini-1.5-flash as fallback...")
+            print("Trying with gemini-2.0-flash as fallback...")
             response = await client.aio.models.generate_content(
-                model="gemini-1.5-flash",
+                model="gemini-2.0-flash",
                 contents=prompt
             )
             return response.text.strip()
         except Exception as e2:
-            return f"요약 중 오류가 발생했습니다. (2.0-Flash 에러: {str(e)}, 1.5-Flash 에러: {str(e2)})"
+            return f"요약 중 오류가 발생했습니다. (1.5-Flash 에러: {str(e)}, 2.0-Flash 에러: {str(e2)})"
 
 async def get_news_content(url):
     headers = {
@@ -125,13 +128,14 @@ async def parse_rss_and_fetch_news(rss_url):
             if link_elem is not None and link_elem.text:
                 links.append(link_elem.text)
                 
-        fetch_tasks = [get_news_content(link) for link in links[:10]]
+        # 테스트를 위해 뉴스 1개만 처리하도록 수정 (links[:1])
+        fetch_tasks = [get_news_content(link) for link in links[:1]]
         fetched_results = await asyncio.gather(*fetch_tasks)
         
         summary_tasks = [summarize_article(title, body) for title, body in fetched_results]
         summaries = await asyncio.gather(*summary_tasks)
         
-        for (title, body), summary, link in zip(fetched_results, summaries, links[:10]):
+        for (title, body), summary, link in zip(fetched_results, summaries, links[:1]):
             articles.append({
                 'title': title,
                 'body': body,
