@@ -7,66 +7,77 @@ import re
 import xml.etree.ElementTree as ET
 from bs4 import BeautifulSoup
 from jinja2 import Template
-import google.generativeai as genai
+from google import genai
 
 app = FastAPI()
 
 # Configure Gemini using environment variable
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
+
+# 최신 google-genai 클라이언트 초기화
+# v1 API를 기본으로 사용하도록 설정
 if GOOGLE_API_KEY:
-    # 기본 설정 사용 (v1beta가 기본값인 경우가 많으나, 1.5 모델은 v1beta에서도 지원됨)
-    genai.configure(api_key=GOOGLE_API_KEY, transport='rest')
+    # google-genai 라이브러리는 http_options를 통해 api_version을 설정합니다.
+    # v1을 명시하여 v1beta에서의 404 오류를 방지합니다.
+    client = genai.Client(
+        api_key=GOOGLE_API_KEY,
+        http_options={'api_version': 'v1'}
+    )
 else:
     print("Warning: GOOGLE_API_KEY environment variable is not set.")
+    client = None
 
 async def summarize_article(title, body):
-    if not GOOGLE_API_KEY:
+    if not GOOGLE_API_KEY or not client:
         return "⚠️ API 키가 설정되지 않았습니다. Render.com 설정에서 GOOGLE_API_KEY를 추가해주세요."
     
     if not body or body == "Content not found" or len(body) < 100:
         return "요약할 충분한 본문 내용이 없습니다."
     
+    prompt = f"""
+    당신은 뉴스 요약 전문가입니다. 다음 뉴스 기사를 읽고 아래 형식에 정확히 맞춰 요약해 주세요.
+    
+    형식:
+    [기사 제목 1줄]
+    . 핵심 요약 첫 번째 줄 (2줄 이내)
+    . 핵심 요약 두 번째 줄 (2줄 이내)
+    
+    주의사항:
+    - 반드시 '.'으로 시작하는 2개의 문장으로 요약하세요.
+    - 불필요한 설명 없이 핵심만 전달하세요.
+    
+    기사 제목: {title}
+    기사 본문: {body}
+    """
+    
     try:
-        # 모델명에서 models/ 를 제거하고 표준 모델명 사용
-        model_name = "gemini-1.5-flash"
-        model = genai.GenerativeModel(model_name)
-        
-        prompt = f"""
-        당신은 뉴스 요약 전문가입니다. 다음 뉴스 기사를 읽고 아래 형식에 정확히 맞춰 요약해 주세요.
-        
-        형식:
-        [기사 제목 1줄]
-        . 핵심 요약 첫 번째 줄 (2줄 이내)
-        . 핵심 요약 두 번째 줄 (2줄 이내)
-        
-        주의사항:
-        - 반드시 '.'으로 시작하는 2개의 문장으로 요약하세요.
-        - 불필요한 설명 없이 핵심만 전달하세요.
-        
-        기사 제목: {title}
-        기사 본문: {body}
-        """
-        
-        response = await asyncio.to_thread(model.generate_content, prompt)
+        # 비동기 방식으로 호출 (client.aio.models.generate_content)
+        # 1.5-flash 모델 시도
+        response = await client.aio.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=prompt
+        )
         return response.text.strip()
     except Exception as e:
         print(f"Error summarizing with flash: {e}")
-        # flash 가 안될 경우 pro 모델로 시도 (gemini-pro 대신 gemini-1.5-pro 사용)
+        # fallback: 1.5-pro 모델로 시도
         try:
             print("Trying with gemini-1.5-pro as fallback...")
-            model = genai.GenerativeModel("gemini-1.5-pro")
-            response = await asyncio.to_thread(model.generate_content, prompt)
+            response = await client.aio.models.generate_content(
+                model="gemini-1.5-pro",
+                contents=prompt
+            )
             return response.text.strip()
         except Exception as e2:
-            return f"요약 중 오류가 발생했습니다. 라이브러리 버전이나 API 키를 확인해주세요. (Flash 에러: {str(e)}, Pro 에러: {str(e2)})"
+            return f"요약 중 오류가 발생했습니다. (Flash 에러: {str(e)}, Pro 에러: {str(e2)})"
 
 async def get_news_content(url):
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
     try:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            response = await client.get(url, headers=headers)
+        async with httpx.AsyncClient(follow_redirects=True) as h_client:
+            response = await h_client.get(url, headers=headers)
             response.raise_for_status()
             html_text = response.text
             
@@ -108,8 +119,8 @@ async def parse_rss_and_fetch_news(rss_url):
     }
     articles = []
     try:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            response = await client.get(rss_url, headers=headers)
+        async with httpx.AsyncClient(follow_redirects=True) as h_client:
+            response = await h_client.get(rss_url, headers=headers)
             response.raise_for_status()
             content = response.text
             
