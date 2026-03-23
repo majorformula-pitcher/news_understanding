@@ -112,14 +112,14 @@ async def parse_rss_and_fetch_news(rss_url):
             if link_elem is not None and link_elem.text:
                 links.append(link_elem.text)
                 
-        # 테스트를 위해 뉴스 1개만 처리하도록 수정 (links[:1])
-        fetch_tasks = [get_news_content(link) for link in links[:1]]
+        # 테스트를 위해 뉴스 1개만 처리하도록 수정 (links[:10])
+        fetch_tasks = [get_news_content(link) for link in links[:10]]
         fetched_results = await asyncio.gather(*fetch_tasks)
         
         summary_tasks = [summarize_article(title, body) for title, body in fetched_results]
         summaries = await asyncio.gather(*summary_tasks)
         
-        for (title, body), summary, link in zip(fetched_results, summaries, links[:1]):
+        for (title, body), summary, link in zip(fetched_results, summaries, links[:10]):
             articles.append({
                 'title': title,
                 'body': body,
