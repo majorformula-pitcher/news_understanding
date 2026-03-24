@@ -322,9 +322,9 @@ HTML_TEMPLATE = """
         .result-item h2 a { text-decoration: none; color: inherit; }
 
         .article-layout { display: flex; gap: 25px; margin-top: 15px; align-items: flex-start; }
-        .article-body { flex: 0 0 auto; width: 100%; font-size: 15px; line-height: 1.8; color: #444; max-height: 500px; overflow-y: auto; padding-right: 15px; }
+        .article-body { flex: 0 0 auto; width: 50%; font-size: 15px; line-height: 1.8; color: #444; max-height: 500px; overflow-y: auto; padding-right: 15px; }
 
-        .summary-section { flex: 0 0 400px; background-color: #fff9db; border: 2px solid #fab005; border-radius: 12px; padding: 20px; position: sticky; top: 20px; display: none; }
+        .summary-section { flex: 0 0 800px; background-color: #fff9db; border: 2px solid #fab005; border-radius: 12px; padding: 20px; position: sticky; top: 20px; display: none; }
         .summary-section.visible { display: block; }
         .summary-section h3 { margin-top: 0; color: #e67e22; font-size: 18px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #ffe066; padding-bottom: 10px; }
         .summary-content { font-size: 16px; color: #2c3e50; font-weight: 600; line-height: 1.6; white-space: pre-wrap; }
