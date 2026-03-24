@@ -118,8 +118,11 @@ async def summarize_article(title, body):
             messages=[{"role": "user", "content": prompt}]
         )
         text = response.content[0].text.strip()
-        text = re.sub(r'^[#*\s]+', '', text, flags=re.MULTILINE)
-        return text
+        text = re.sub(r'\*+', '', text)
+        text = re.sub(r'#+\s*', '', text)
+        text = re.sub(r'`+', '', text)
+        text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+        return text.strip()
     except Exception as e:
         return f"요약 중 오류가 발생했습니다: {str(e)}"
 
