@@ -168,7 +168,7 @@ async def get_news_content(url):
         
         title = title_element.get_text(strip=True) if title_element else "제목을 찾을 수 없음"
 
-        body_selectors = ['div.article_txt', 'div.article_body', 'div[itemprop="articleBody"]', 'div#articleBody', 'article', 'div.content']
+        body_selectors = ['div.article_txt', 'div.article_body', 'div[itemprop="articleBody"]', 'div#articleBody', 'div.entry-content', 'article', 'div.content']
         body_element = None
         for selector in body_selectors:
             body_element = soup.select_one(selector)
@@ -371,7 +371,7 @@ HTML_TEMPLATE = """
             {% endif %}
         </div>
 
-        <div id="loading" class="loading-overlay">AI가 뉴스를 읽고 요약하는 중입니다...</div>
+        <div id="loading" class="loading-overlay">뉴스를 불러오는 중입니다...</div>
 
         {% if error %}
         <div class="error-msg">{{ error }}</div>
