@@ -285,7 +285,6 @@ HTML_TEMPLATE = """
             margin-left: 200px;
             flex: 1;
             padding: 25px 30px;
-            max-width: 1400px;
         }
         .content-header {
             display: flex;
@@ -315,10 +314,9 @@ HTML_TEMPLATE = """
         .result-item h2 a { text-decoration: none; color: inherit; }
 
         .article-layout { display: flex; gap: 25px; margin-top: 15px; align-items: flex-start; }
-        .article-body { width: 100%; font-size: 15px; line-height: 1.8; color: #444; max-height: 500px; overflow-y: auto; padding-right: 15px; }
-        .article-body.with-summary { width: 55%; flex-shrink: 0; border-right: 1px solid #eee; }
+        .article-body { flex: 0 0 auto; width: 100%; font-size: 15px; line-height: 1.8; color: #444; max-height: 500px; overflow-y: auto; padding-right: 15px; }
 
-        .summary-section { width: 45%; background-color: #fff9db; border: 2px solid #fab005; border-radius: 12px; padding: 20px; position: sticky; top: 20px; display: none; }
+        .summary-section { flex: 0 0 400px; background-color: #fff9db; border: 2px solid #fab005; border-radius: 12px; padding: 20px; position: sticky; top: 20px; display: none; }
         .summary-section.visible { display: block; }
         .summary-section h3 { margin-top: 0; color: #e67e22; font-size: 18px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #ffe066; padding-bottom: 10px; }
         .summary-content { font-size: 16px; color: #2c3e50; font-weight: 600; line-height: 1.6; white-space: pre-wrap; }
@@ -341,8 +339,9 @@ HTML_TEMPLATE = """
             .feed-tab { font-size: 11px; padding: 10px 8px; }
             .content { margin-left: 60px; padding: 15px; }
             .article-layout { flex-direction: column; }
-            .article-body, .article-body.with-summary { width: 100%; border-right: none; border-bottom: 1px solid #eee; padding-bottom: 15px; padding-right: 0; }
-            .summary-section { position: static; width: 100%; }
+            .article-layout { flex-direction: column; }
+            .article-body { width: 100%; border-bottom: 1px solid #eee; padding-bottom: 15px; padding-right: 0; }
+            .summary-section { position: static; flex: 0 0 100%; }
         }
     </style>
 </head>
@@ -411,11 +410,9 @@ HTML_TEMPLATE = """
         const btn = document.querySelectorAll('.summarize-btn')[idx];
         const summaryDiv = document.getElementById('summary-' + idx);
         const contentDiv = summaryDiv.querySelector('.summary-content');
-        const bodyDiv = document.querySelector('#article-' + idx + ' .article-body');
 
         btn.disabled = true;
         btn.textContent = '요약 중...';
-        bodyDiv.classList.add('with-summary');
         summaryDiv.classList.add('visible');
         contentDiv.textContent = 'AI가 요약하는 중입니다...';
 
