@@ -1,6 +1,7 @@
 import os
+import io
 from fastapi import FastAPI, Request, Form
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 import httpx
 import asyncio
 import re
@@ -9,6 +10,10 @@ from bs4 import BeautifulSoup
 from jinja2 import Template
 import anthropic
 from supabase import create_client
+from pptx import Presentation
+from pptx.util import Inches, Pt, Emu
+from pptx.dml.color import RGBColor
+from pptx.enum.text import PP_ALIGN
 
 app = FastAPI()
 
@@ -264,6 +269,9 @@ HTML_TEMPLATE = """
     {% endif %}
 
     {% if articles %}
+        <div style="text-align: center; margin-bottom: 25px;">
+            <a href="/download-ppt" style="display: inline-block; padding: 15px 30px; background-color: #e67e22; color: white; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: bold;">📥 PPT 다운로드 (슬라이드 {{ (articles|length + 1) // 2 + 1 }}장)</a>
+        </div>
         {% for article in articles %}
         <div class="result-item">
             <h2><a href="{{ article.link }}" target="_blank">{{ article.title }}</a></h2>
@@ -283,6 +291,94 @@ HTML_TEMPLATE = """
 </body>
 </html>
 """
+
+def generate_ppt(articles):
+    """뉴스 요약을 PPT로 생성 (슬라이드 1장당 2개 기사)"""
+    prs = Presentation()
+    prs.slide_width = Inches(13.333)
+    prs.slide_height = Inches(7.5)
+
+    # 타이틀 슬라이드
+    slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank
+    txBox = slide.shapes.add_textbox(Inches(0.5), Inches(2.5), Inches(12.3), Inches(2))
+    tf = txBox.text_frame
+    tf.word_wrap = True
+    p = tf.paragraphs[0]
+    p.text = "뉴스 핵심 요약"
+    p.font.size = Pt(44)
+    p.font.bold = True
+    p.font.color.rgb = RGBColor(26, 115, 232)
+    p.alignment = PP_ALIGN.CENTER
+
+    p2 = tf.add_paragraph()
+    p2.text = f"총 {len(articles)}건"
+    p2.font.size = Pt(24)
+    p2.font.color.rgb = RGBColor(100, 100, 100)
+    p2.alignment = PP_ALIGN.CENTER
+
+    # 기사 2개씩 슬라이드에 배치
+    for i in range(0, len(articles), 2):
+        slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank
+        pair = articles[i:i+2]
+
+        for j, article in enumerate(pair):
+            left = Inches(0.5) if j == 0 else Inches(6.9)
+            width = Inches(6.0)
+
+            # 제목
+            title_box = slide.shapes.add_textbox(left, Inches(0.4), width, Inches(1.0))
+            tf_title = title_box.text_frame
+            tf_title.word_wrap = True
+            p_title = tf_title.paragraphs[0]
+            p_title.text = article["title"]
+            p_title.font.size = Pt(18)
+            p_title.font.bold = True
+            p_title.font.color.rgb = RGBColor(33, 33, 33)
+
+            # 구분선
+            line = slide.shapes.add_shape(
+                1, left, Inches(1.5), width, Emu(0)
+            )
+            line.line.color.rgb = RGBColor(26, 115, 232)
+            line.line.width = Pt(2)
+
+            # 요약
+            summary_box = slide.shapes.add_textbox(left, Inches(1.7), width, Inches(4.5))
+            tf_summary = summary_box.text_frame
+            tf_summary.word_wrap = True
+            p_summary = tf_summary.paragraphs[0]
+            p_summary.text = article.get("summary") or "요약 없음"
+            p_summary.font.size = Pt(14)
+            p_summary.font.color.rgb = RGBColor(44, 62, 80)
+            p_summary.line_spacing = Pt(24)
+
+            # URL
+            url_box = slide.shapes.add_textbox(left, Inches(6.3), width, Inches(0.5))
+            tf_url = url_box.text_frame
+            tf_url.word_wrap = True
+            p_url = tf_url.paragraphs[0]
+            p_url.text = article.get("link", "")
+            p_url.font.size = Pt(10)
+            p_url.font.color.rgb = RGBColor(150, 150, 150)
+
+    output = io.BytesIO()
+    prs.save(output)
+    output.seek(0)
+    return output
+
+
+@app.get("/download-ppt")
+def download_ppt():
+    articles = load_articles_from_db()
+    if not articles:
+        return HTMLResponse(content="<h3>다운로드할 기사가 없습니다.</h3>", status_code=404)
+    output = generate_ppt(articles)
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        headers={"Content-Disposition": "attachment; filename=news_summary.pptx"},
+    )
+
 
 @app.get("/", response_class=HTMLResponse)
 def get_index():
