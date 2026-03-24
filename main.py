@@ -168,7 +168,7 @@ async def get_news_content(url):
         
         title = title_element.get_text(strip=True) if title_element else "제목을 찾을 수 없음"
 
-        body_selectors = ['div.article_txt', 'div.article_body', '[itemprop="articleBody"]', 'div#articleBody', 'div.entry-content', 'article', 'div.content']
+        body_selectors = ['div.article_txt', 'div.article_body', '[itemprop="articleBody"]', 'div#articleBody', 'div.entry-content', 'div.blog-content', 'article', 'div.content']
         body_element = None
         for selector in body_selectors:
             body_element = soup.select_one(selector)
@@ -201,20 +201,28 @@ async def parse_rss_and_fetch_news(rss_url):
             content = response.text
             
         root = ET.fromstring(content)
-        links = []
+        items = []
         for item in root.findall('.//item'):
             link_elem = item.find('link')
             if link_elem is not None and link_elem.text:
-                links.append(link_elem.text)
-                
-        fetch_tasks = [get_news_content(link) for link in links[:10]]
+                title_elem = item.find('title')
+                desc_elem = item.find('description')
+                rss_title = title_elem.text.strip() if title_elem is not None and title_elem.text else ""
+                rss_desc = desc_elem.text.strip() if desc_elem is not None and desc_elem.text else ""
+                items.append({'link': link_elem.text, 'rss_title': rss_title, 'rss_desc': rss_desc})
+
+        fetch_tasks = [get_news_content(it['link']) for it in items[:10]]
         fetched_results = await asyncio.gather(*fetch_tasks)
 
-        for (title, body), link in zip(fetched_results, links[:10]):
+        for (title, body), it in zip(fetched_results, items[:10]):
+            # 페이지 접근 실패 시 RSS 데이터로 대체
+            if title.startswith("오류 발생:") or not body or body == "본문을 찾을 수 없습니다.":
+                title = it['rss_title'] or title
+                body = it['rss_desc'] or body
             articles.append({
                 'title': title,
                 'body': body,
-                'link': link,
+                'link': it['link'],
                 'summary': ''
             })
     except Exception as e:
