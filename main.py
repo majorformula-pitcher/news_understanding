@@ -41,6 +41,7 @@ else:
 def save_articles_to_db(articles):
     """뉴스 기사를 Supabase에 저장. 오류 발생 시 메시지 반환"""
     global supabase_error
+    supabase_error = None
     if not supabase:
         return
     for article in articles:
@@ -62,6 +63,7 @@ def save_articles_to_db(articles):
 def load_articles_from_db():
     """Supabase에서 저장된 기사 목록 조회"""
     global supabase_error
+    supabase_error = None
     if not supabase:
         return []
     try:
