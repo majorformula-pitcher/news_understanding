@@ -105,6 +105,7 @@ async def summarize_article(title, body):
 주의사항:
 - 반드시 '.'으로 시작하는 2개의 문장으로 요약하세요.
 - 불필요한 설명 없이 핵심만 전달하세요.
+- 마크다운 문법(**, ##, *, # 등)을 절대 사용하지 마세요. 순수 텍스트로만 작성하세요.
 
 기사 제목: {title}
 기사 본문: {body}"""
@@ -116,7 +117,9 @@ async def summarize_article(title, body):
             system="당신은 뉴스 요약 전문가입니다.",
             messages=[{"role": "user", "content": prompt}]
         )
-        return response.content[0].text.strip()
+        text = response.content[0].text.strip()
+        text = re.sub(r'^[#*\s]+', '', text, flags=re.MULTILINE)
+        return text
     except Exception as e:
         return f"요약 중 오류가 발생했습니다: {str(e)}"
 
