@@ -1,6 +1,6 @@
 import os
 import io
-from fastapi import FastAPI, Request, Form
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 import httpx
 import asyncio
@@ -16,6 +16,22 @@ from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
 
 app = FastAPI()
+
+# RSS 피드 목록
+RSS_FEEDS = [
+    {"name": "로봇신문-AI", "url": "https://www.irobotnews.com/rss/S1N2.xml"},
+    {"name": "로봇신문-로봇", "url": "https://www.irobotnews.com/rss/S1N1.xml"},
+    {"name": "전자신문-AI", "url": "http://rss.etnews.com/04046.xml"},
+    {"name": "The AI", "url": "https://www.newstheai.com/rss/allArticle.xml"},
+    {"name": "ZDNet", "url": "https://zdnet.co.kr/rss/all.xml"},
+    {"name": "TechCrunch", "url": "https://techcrunch.com/category/artificial-intelligence/feed/"},
+    {"name": "The Verge", "url": "https://www.theverge.com/rss/index.xml"},
+    {"name": "Wired", "url": "https://www.wired.com/feed/category/business/latest/rss"},
+    {"name": "OpenAI", "url": "https://openai.com/news/rss.xml"},
+    {"name": "AI Jobs", "url": "https://aijobs.net/feed/"},
+    {"name": "AI (arxiv)", "url": "http://export.arxiv.org/rss/cs.AI"},
+    {"name": "Hugging Face", "url": "https://huggingface.co/blog/feed.xml"},
+]
 
 # Configure Claude API using environment variable
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
@@ -216,78 +232,168 @@ HTML_TEMPLATE = """
     <meta charset="utf-8">
     <title>뉴스 요약기</title>
     <style>
-        body { font-family: 'Pretendard', sans-serif; max-width: 1400px; margin: 0 auto; padding: 20px; background-color: #f0f2f5; }
-        h1 { text-align: center; color: #1a73e8; margin-bottom: 30px; }
-        .form-group { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: flex; gap: 10px; margin-bottom: 30px; }
-        input[type="text"] { flex-grow: 1; padding: 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 16px; transition: border-color 0.3s; }
-        input[type="text"]:focus { border-color: #1a73e8; outline: none; }
-        button { padding: 15px 30px; background-color: #1a73e8; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; }
-        button:hover { background-color: #1557b0; }
-        
-        .result-item { background: white; margin-bottom: 40px; padding: 30px; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-        .result-item h2 { margin-top: 0; color: #333; font-size: 26px; border-bottom: 2px solid #f0f2f5; padding-bottom: 15px; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Pretendard', sans-serif; background-color: #f0f2f5; display: flex; min-height: 100vh; }
+
+        /* 왼쪽 사이드바 */
+        .sidebar {
+            width: 200px;
+            min-width: 200px;
+            background: #1a2233;
+            padding: 20px 0;
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            overflow-y: auto;
+            z-index: 100;
+        }
+        .sidebar-title {
+            color: #fff;
+            font-size: 16px;
+            font-weight: bold;
+            text-align: center;
+            padding: 10px 15px 20px;
+            border-bottom: 1px solid #2a3a50;
+            margin-bottom: 10px;
+        }
+        .feed-tab {
+            display: block;
+            width: 100%;
+            padding: 14px 18px;
+            background: none;
+            border: none;
+            color: #a0b0c8;
+            font-size: 14px;
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-left: 3px solid transparent;
+            text-decoration: none;
+        }
+        .feed-tab:hover {
+            background: #253045;
+            color: #fff;
+        }
+        .feed-tab.active {
+            background: #253045;
+            color: #4a9eff;
+            border-left-color: #4a9eff;
+            font-weight: bold;
+        }
+
+        /* 오른쪽 콘텐츠 영역 */
+        .content {
+            margin-left: 200px;
+            flex: 1;
+            padding: 25px 30px;
+            max-width: 1400px;
+        }
+        .content-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 25px;
+        }
+        .content-header h1 {
+            color: #1a73e8;
+            font-size: 24px;
+        }
+        .ppt-btn {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: #e67e22;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+        .ppt-btn:hover { background-color: #cf6d17; }
+
+        .result-item { background: white; margin-bottom: 30px; padding: 25px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
+        .result-item h2 { margin-top: 0; color: #333; font-size: 22px; border-bottom: 2px solid #f0f2f5; padding-bottom: 12px; }
         .result-item h2 a { text-decoration: none; color: inherit; }
-        
-        .article-layout { display: flex; gap: 30px; margin-top: 20px; align-items: flex-start; }
-        .article-body { flex: 1.5; font-size: 16px; line-height: 1.8; color: #444; max-height: 600px; overflow-y: auto; padding-right: 15px; border-right: 1px solid #eee; }
-        
-        .summary-section { flex: 1.5; min-width: 420px; background-color: #fff9db; border: 2px solid #fab005; border-radius: 12px; padding: 25px; position: sticky; top: 20px; }
-        .summary-section h3 { margin-top: 0; color: #e67e22; font-size: 20px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #ffe066; padding-bottom: 10px; }
-        .summary-section h3::before { content: '📋'; }
-        .summary-content { font-size: 17px; color: #2c3e50; font-weight: 600; line-height: 1.6; white-space: pre-wrap; }
-        
-        .original-btn { display: inline-block; margin-top: 25px; padding: 10px 20px; border: 1px solid #1a73e8; color: #1a73e8; text-decoration: none; border-radius: 6px; font-size: 14px; transition: all 0.3s; }
+
+        .article-layout { display: flex; gap: 25px; margin-top: 15px; align-items: flex-start; }
+        .article-body { flex: 1.5; font-size: 15px; line-height: 1.8; color: #444; max-height: 500px; overflow-y: auto; padding-right: 15px; border-right: 1px solid #eee; }
+
+        .summary-section { flex: 1.5; min-width: 380px; background-color: #fff9db; border: 2px solid #fab005; border-radius: 12px; padding: 20px; position: sticky; top: 20px; }
+        .summary-section h3 { margin-top: 0; color: #e67e22; font-size: 18px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #ffe066; padding-bottom: 10px; }
+        .summary-content { font-size: 16px; color: #2c3e50; font-weight: 600; line-height: 1.6; white-space: pre-wrap; }
+
+        .original-btn { display: inline-block; margin-top: 20px; padding: 8px 18px; border: 1px solid #1a73e8; color: #1a73e8; text-decoration: none; border-radius: 6px; font-size: 13px; transition: all 0.3s; }
         .original-btn:hover { background-color: #1a73e8; color: white; }
-        
+
         .error-msg { background: #fff5f5; color: #c92a2a; padding: 15px; border-radius: 8px; border: 1px solid #ffc9c9; margin-bottom: 20px; }
-        .loading-overlay { display: none; text-align: center; color: #1a73e8; font-weight: bold; font-size: 18px; margin-top: 20px; }
-        
+        .loading-overlay { display: none; text-align: center; color: #1a73e8; font-weight: bold; font-size: 18px; padding: 40px 0; }
+        .db-error { font-size: 13px; color: #c92a2a; background: #fff5f5; border: 1px solid #ffc9c9; border-radius: 8px; padding: 8px 15px; margin-bottom: 15px; }
+        .empty-state { text-align: center; color: #888; padding: 60px 20px; font-size: 18px; }
+
         @media (max-width: 900px) {
+            .sidebar { width: 60px; min-width: 60px; }
+            .sidebar-title { font-size: 12px; padding: 10px 5px 15px; }
+            .feed-tab { font-size: 11px; padding: 10px 8px; }
+            .content { margin-left: 60px; padding: 15px; }
             .article-layout { flex-direction: column; }
-            .article-body { border-right: none; border-bottom: 1px solid #eee; padding-bottom: 20px; padding-right: 0; }
-            .summary-section { position: static; width: 100%; box-sizing: border-box; }
+            .article-body { border-right: none; border-bottom: 1px solid #eee; padding-bottom: 15px; padding-right: 0; }
+            .summary-section { position: static; width: 100%; min-width: auto; }
         }
     </style>
 </head>
 <body>
-    <h1>🚀 뉴스 핵심 요약 서비스
-        {% if db_error %}
-        <div style="font-size: 14px; color: #c92a2a; background: #fff5f5; border: 1px solid #ffc9c9; border-radius: 8px; padding: 8px 15px; margin-top: 10px;">⚠️ Supabase 오류: {{ db_error }}</div>
-        {% endif %}
-    </h1>
-    <form method="POST" onsubmit="document.getElementById('loading').style.display='block';">
-        <div class="form-group">
-            <input type="text" name="url" placeholder="뉴스 URL 또는 RSS 주소를 입력하세요" value="{{ url or 'https://rss.etnews.com/04046.xml' }}" required>
-            <button type="submit">분석 및 요약</button>
-        </div>
-    </form>
-    
-    <div id="loading" class="loading-overlay">🤖 AI가 뉴스를 읽고 요약하는 중입니다...</div>
-
-    {% if error %}
-    <div class="error-msg">{{ error }}</div>
-    {% endif %}
-
-    {% if articles %}
-        <div style="text-align: center; margin-bottom: 25px;">
-            <a href="/download-ppt" style="display: inline-block; padding: 15px 30px; background-color: #e67e22; color: white; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: bold;">📥 PPT 다운로드 (슬라이드 {{ (articles|length + 1) // 2 + 1 }}장)</a>
-        </div>
-        {% for article in articles %}
-        <div class="result-item">
-            <h2><a href="{{ article.link }}" target="_blank">{{ article.title }}</a></h2>
-            <div class="article-layout">
-                <div class="article-body">
-                    {{ article.body }}
-                </div>
-                <div class="summary-section">
-                    <h3>요약 뉴스</h3>
-                    <div class="summary-content">{{ article.summary or '요약을 생성할 수 없습니다.' }}</div>
-                </div>
-            </div>
-            <a href="{{ article.link }}" target="_blank" class="original-btn">원문 보기</a>
-        </div>
+    <!-- 왼쪽 사이드바: 뉴스 제공자 탭 -->
+    <nav class="sidebar">
+        <div class="sidebar-title">뉴스 제공자</div>
+        {% for feed in feeds %}
+        <a href="/?feed={{ loop.index0 }}"
+           class="feed-tab {% if active_feed == loop.index0 %}active{% endif %}"
+           onclick="document.getElementById('loading').style.display='block';">
+            {{ feed.name }}
+        </a>
         {% endfor %}
-    {% endif %}
+    </nav>
+
+    <!-- 오른쪽 콘텐츠 영역 -->
+    <main class="content">
+        {% if db_error %}
+        <div class="db-error">Supabase 오류: {{ db_error }}</div>
+        {% endif %}
+
+        <div class="content-header">
+            <h1>{% if active_feed is not none %}{{ feeds[active_feed].name }}{% else %}뉴스 핵심 요약 서비스{% endif %}</h1>
+            {% if articles %}
+            <a href="/download-ppt" class="ppt-btn">PPT 다운로드 ({{ (articles|length + 1) // 2 + 1 }}장)</a>
+            {% endif %}
+        </div>
+
+        <div id="loading" class="loading-overlay">AI가 뉴스를 읽고 요약하는 중입니다...</div>
+
+        {% if error %}
+        <div class="error-msg">{{ error }}</div>
+        {% endif %}
+
+        {% if articles %}
+            {% for article in articles %}
+            <div class="result-item">
+                <h2><a href="{{ article.link }}" target="_blank">{{ article.title }}</a></h2>
+                <div class="article-layout">
+                    <div class="article-body">{{ article.body }}</div>
+                    <div class="summary-section">
+                        <h3>요약</h3>
+                        <div class="summary-content">{{ article.summary or '요약을 생성할 수 없습니다.' }}</div>
+                    </div>
+                </div>
+                <a href="{{ article.link }}" target="_blank" class="original-btn">원문 보기</a>
+            </div>
+            {% endfor %}
+        {% elif active_feed is none %}
+            <div class="empty-state">왼쪽에서 뉴스 제공자를 선택하세요.</div>
+        {% endif %}
+    </main>
 </body>
 </html>
 """
@@ -381,35 +487,27 @@ def download_ppt():
 
 
 @app.get("/", response_class=HTMLResponse)
-def get_index():
+async def get_index(feed: int = None):
     template = Template(HTML_TEMPLATE)
-    saved_articles = load_articles_from_db()
-    return HTMLResponse(content=template.render(url="", articles=saved_articles, error=None, db_error=supabase_error))
-
-@app.post("/", response_class=HTMLResponse)
-async def post_index(request: Request):
-    form_data = await request.form()
-    url = form_data.get("url", "").strip()
     articles, error = [], None
-    
-    if url:
+    active_feed = feed
+
+    if feed is not None and 0 <= feed < len(RSS_FEEDS):
         try:
-            if '.xml' in url or 'rss' in url.lower():
-                articles = await parse_rss_and_fetch_news(url)
-            else:
-                title, body = await get_news_content(url)
-                if title.startswith("오류 발생:"): error = title
-                else:
-                    summary = await summarize_article(title, body)
-                    articles = [{'title': title, 'body': body, 'link': url, 'summary': summary}]
+            rss_url = RSS_FEEDS[feed]["url"]
+            articles = await parse_rss_and_fetch_news(rss_url)
+            if articles:
+                save_articles_to_db(articles)
         except Exception as e:
             error = str(e)
 
-    if articles:
-        save_articles_to_db(articles)
-
-    template = Template(HTML_TEMPLATE)
-    return HTMLResponse(content=template.render(url=url, articles=articles, error=error, db_error=supabase_error))
+    return HTMLResponse(content=template.render(
+        feeds=RSS_FEEDS,
+        active_feed=active_feed,
+        articles=articles,
+        error=error,
+        db_error=supabase_error,
+    ))
 
 if __name__ == "__main__":
     import uvicorn
