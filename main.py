@@ -137,7 +137,7 @@ HTML_TEMPLATE = """
     <meta charset="utf-8">
     <title>뉴스 요약기</title>
     <style>
-        body { font-family: 'Pretendard', sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background-color: #f0f2f5; }
+        body { font-family: 'Pretendard', sans-serif; max-width: 1400px; margin: 0 auto; padding: 20px; background-color: #f0f2f5; }
         h1 { text-align: center; color: #1a73e8; margin-bottom: 30px; }
         .form-group { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: flex; gap: 10px; margin-bottom: 30px; }
         input[type="text"] { flex-grow: 1; padding: 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 16px; transition: border-color 0.3s; }
@@ -152,7 +152,7 @@ HTML_TEMPLATE = """
         .article-layout { display: flex; gap: 30px; margin-top: 20px; align-items: flex-start; }
         .article-body { flex: 1.5; font-size: 16px; line-height: 1.8; color: #444; max-height: 600px; overflow-y: auto; padding-right: 15px; border-right: 1px solid #eee; }
         
-        .summary-section { flex: 1; background-color: #fff9db; border: 2px solid #fab005; border-radius: 12px; padding: 25px; position: sticky; top: 20px; }
+        .summary-section { flex: 1.5; min-width: 420px; background-color: #fff9db; border: 2px solid #fab005; border-radius: 12px; padding: 25px; position: sticky; top: 20px; }
         .summary-section h3 { margin-top: 0; color: #e67e22; font-size: 20px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #ffe066; padding-bottom: 10px; }
         .summary-section h3::before { content: '📋'; }
         .summary-content { font-size: 17px; color: #2c3e50; font-weight: 600; line-height: 1.6; white-space: pre-wrap; }
