@@ -45,7 +45,7 @@ def save_articles_to_db(articles):
         return
     for article in articles:
         try:
-            supabase.table("articles").upsert(
+            supabase.table("news-understanding").upsert(
                 {
                     "title": article["title"],
                     "content": article["body"],
@@ -66,7 +66,7 @@ def load_articles_from_db():
         return []
     try:
         result = (
-            supabase.table("articles")
+            supabase.table("news-understanding")
             .select("*")
             .order("created_at", desc=True)
             .limit(50)
