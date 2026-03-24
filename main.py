@@ -26,17 +26,21 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
 supabase = None
+supabase_error = None
 if SUPABASE_URL and SUPABASE_KEY:
     try:
         supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
     except Exception as e:
-        print(f"Warning: Supabase 연결 실패: {e}")
+        supabase_error = f"Supabase 연결 실패: {e}"
+        print(f"Warning: {supabase_error}")
 else:
-    print("Warning: SUPABASE_URL or SUPABASE_KEY environment variable is not set.")
+    supabase_error = "SUPABASE_URL 또는 SUPABASE_KEY 환경변수가 설정되지 않았습니다."
+    print(f"Warning: {supabase_error}")
 
 
 def save_articles_to_db(articles):
-    """뉴스 기사를 Supabase에 저장"""
+    """뉴스 기사를 Supabase에 저장. 오류 발생 시 메시지 반환"""
+    global supabase_error
     if not supabase:
         return
     for article in articles:
@@ -51,11 +55,13 @@ def save_articles_to_db(articles):
                 on_conflict="url",
             ).execute()
         except Exception as e:
-            print(f"DB 저장 오류: {e}")
+            supabase_error = f"DB 저장 오류: {e}"
+            print(supabase_error)
 
 
 def load_articles_from_db():
     """Supabase에서 저장된 기사 목록 조회"""
+    global supabase_error
     if not supabase:
         return []
     try:
@@ -76,7 +82,8 @@ def load_articles_from_db():
             for row in result.data
         ]
     except Exception as e:
-        print(f"DB 조회 오류: {e}")
+        supabase_error = f"DB 조회 오류: {e}"
+        print(supabase_error)
         return []
 
 async def summarize_article(title, body):
@@ -230,7 +237,11 @@ HTML_TEMPLATE = """
     </style>
 </head>
 <body>
-    <h1>🚀 뉴스 핵심 요약 서비스</h1>
+    <h1>🚀 뉴스 핵심 요약 서비스
+        {% if db_error %}
+        <div style="font-size: 14px; color: #c92a2a; background: #fff5f5; border: 1px solid #ffc9c9; border-radius: 8px; padding: 8px 15px; margin-top: 10px;">⚠️ Supabase 오류: {{ db_error }}</div>
+        {% endif %}
+    </h1>
     <form method="POST" onsubmit="document.getElementById('loading').style.display='block';">
         <div class="form-group">
             <input type="text" name="url" placeholder="뉴스 URL 또는 RSS 주소를 입력하세요" value="{{ url or 'https://rss.etnews.com/04046.xml' }}" required>
@@ -269,7 +280,7 @@ HTML_TEMPLATE = """
 def get_index():
     template = Template(HTML_TEMPLATE)
     saved_articles = load_articles_from_db()
-    return HTMLResponse(content=template.render(url="", articles=saved_articles, error=None))
+    return HTMLResponse(content=template.render(url="", articles=saved_articles, error=None, db_error=supabase_error))
 
 @app.post("/", response_class=HTMLResponse)
 async def post_index(request: Request):
@@ -294,7 +305,7 @@ async def post_index(request: Request):
         save_articles_to_db(articles)
 
     template = Template(HTML_TEMPLATE)
-    return HTMLResponse(content=template.render(url=url, articles=articles, error=error))
+    return HTMLResponse(content=template.render(url=url, articles=articles, error=error, db_error=supabase_error))
 
 if __name__ == "__main__":
     import uvicorn
