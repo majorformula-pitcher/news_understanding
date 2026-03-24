@@ -8,6 +8,7 @@ import xml.etree.ElementTree as ET
 from bs4 import BeautifulSoup
 from jinja2 import Template
 import anthropic
+from supabase import create_client
 
 app = FastAPI()
 
@@ -19,6 +20,61 @@ if ANTHROPIC_API_KEY:
 else:
     print("Warning: ANTHROPIC_API_KEY environment variable is not set.")
     client = None
+
+# Configure Supabase
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+
+if SUPABASE_URL and SUPABASE_KEY:
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+else:
+    print("Warning: SUPABASE_URL or SUPABASE_KEY environment variable is not set.")
+    supabase = None
+
+
+def save_articles_to_db(articles):
+    """뉴스 기사를 Supabase에 저장"""
+    if not supabase:
+        return
+    for article in articles:
+        try:
+            supabase.table("articles").upsert(
+                {
+                    "title": article["title"],
+                    "content": article["body"],
+                    "summary": article["summary"],
+                    "url": article["link"],
+                },
+                on_conflict="url",
+            ).execute()
+        except Exception as e:
+            print(f"DB 저장 오류: {e}")
+
+
+def load_articles_from_db():
+    """Supabase에서 저장된 기사 목록 조회"""
+    if not supabase:
+        return []
+    try:
+        result = (
+            supabase.table("articles")
+            .select("*")
+            .order("created_at", desc=True)
+            .limit(50)
+            .execute()
+        )
+        return [
+            {
+                "title": row["title"],
+                "body": row["content"],
+                "summary": row["summary"],
+                "link": row["url"],
+            }
+            for row in result.data
+        ]
+    except Exception as e:
+        print(f"DB 조회 오류: {e}")
+        return []
 
 async def summarize_article(title, body):
     if not ANTHROPIC_API_KEY or not client:
@@ -209,7 +265,8 @@ HTML_TEMPLATE = """
 @app.get("/", response_class=HTMLResponse)
 def get_index():
     template = Template(HTML_TEMPLATE)
-    return HTMLResponse(content=template.render(url="", articles=[], error=None))
+    saved_articles = load_articles_from_db()
+    return HTMLResponse(content=template.render(url="", articles=saved_articles, error=None))
 
 @app.post("/", response_class=HTMLResponse)
 async def post_index(request: Request):
@@ -229,7 +286,10 @@ async def post_index(request: Request):
                     articles = [{'title': title, 'body': body, 'link': url, 'summary': summary}]
         except Exception as e:
             error = str(e)
-            
+
+    if articles:
+        save_articles_to_db(articles)
+
     template = Template(HTML_TEMPLATE)
     return HTMLResponse(content=template.render(url=url, articles=articles, error=error))
 
