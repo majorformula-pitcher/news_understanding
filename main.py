@@ -25,11 +25,14 @@ else:
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
+supabase = None
 if SUPABASE_URL and SUPABASE_KEY:
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    except Exception as e:
+        print(f"Warning: Supabase 연결 실패: {e}")
 else:
     print("Warning: SUPABASE_URL or SUPABASE_KEY environment variable is not set.")
-    supabase = None
 
 
 def save_articles_to_db(articles):
