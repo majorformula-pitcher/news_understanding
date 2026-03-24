@@ -1,7 +1,7 @@
 import os
 import io
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 import httpx
 import asyncio
 import re
@@ -207,19 +207,15 @@ async def parse_rss_and_fetch_news(rss_url):
             if link_elem is not None and link_elem.text:
                 links.append(link_elem.text)
                 
-        # 테스트를 위해 뉴스 1개만 처리하도록 수정 (links[:10])
         fetch_tasks = [get_news_content(link) for link in links[:10]]
         fetched_results = await asyncio.gather(*fetch_tasks)
-        
-        summary_tasks = [summarize_article(title, body) for title, body in fetched_results]
-        summaries = await asyncio.gather(*summary_tasks)
-        
-        for (title, body), summary, link in zip(fetched_results, summaries, links[:10]):
+
+        for (title, body), link in zip(fetched_results, links[:10]):
             articles.append({
                 'title': title,
                 'body': body,
                 'link': link,
-                'summary': summary
+                'summary': ''
             })
     except Exception as e:
         raise Exception(f"RSS 파싱 중 오류 발생: {e}")
@@ -321,12 +317,17 @@ HTML_TEMPLATE = """
         .article-layout { display: flex; gap: 25px; margin-top: 15px; align-items: flex-start; }
         .article-body { flex: 1.5; font-size: 15px; line-height: 1.8; color: #444; max-height: 500px; overflow-y: auto; padding-right: 15px; border-right: 1px solid #eee; }
 
-        .summary-section { flex: 1.5; min-width: 380px; background-color: #fff9db; border: 2px solid #fab005; border-radius: 12px; padding: 20px; position: sticky; top: 20px; }
+        .summary-section { flex: 1.5; min-width: 380px; background-color: #fff9db; border: 2px solid #fab005; border-radius: 12px; padding: 20px; position: sticky; top: 20px; display: none; }
+        .summary-section.visible { display: block; }
         .summary-section h3 { margin-top: 0; color: #e67e22; font-size: 18px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #ffe066; padding-bottom: 10px; }
         .summary-content { font-size: 16px; color: #2c3e50; font-weight: 600; line-height: 1.6; white-space: pre-wrap; }
 
-        .original-btn { display: inline-block; margin-top: 20px; padding: 8px 18px; border: 1px solid #1a73e8; color: #1a73e8; text-decoration: none; border-radius: 6px; font-size: 13px; transition: all 0.3s; }
+        .btn-row { display: flex; gap: 10px; margin-top: 20px; align-items: center; }
+        .original-btn { display: inline-block; padding: 8px 18px; border: 1px solid #1a73e8; color: #1a73e8; text-decoration: none; border-radius: 6px; font-size: 13px; transition: all 0.3s; }
         .original-btn:hover { background-color: #1a73e8; color: white; }
+        .summarize-btn { display: inline-block; padding: 8px 18px; background-color: #fab005; color: #fff; border: none; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer; transition: all 0.3s; }
+        .summarize-btn:hover { background-color: #e6a200; }
+        .summarize-btn:disabled { background-color: #ccc; cursor: not-allowed; }
 
         .error-msg { background: #fff5f5; color: #c92a2a; padding: 15px; border-radius: 8px; border: 1px solid #ffc9c9; margin-bottom: 20px; }
         .loading-overlay { display: none; text-align: center; color: #1a73e8; font-weight: bold; font-size: 18px; padding: 40px 0; }
@@ -378,22 +379,59 @@ HTML_TEMPLATE = """
 
         {% if articles %}
             {% for article in articles %}
-            <div class="result-item">
+            <div class="result-item" id="article-{{ loop.index0 }}">
                 <h2><a href="{{ article.link }}" target="_blank">{{ article.title }}</a></h2>
                 <div class="article-layout">
                     <div class="article-body">{{ article.body }}</div>
-                    <div class="summary-section">
+                    <div class="summary-section" id="summary-{{ loop.index0 }}">
                         <h3>요약</h3>
-                        <div class="summary-content">{{ article.summary or '요약을 생성할 수 없습니다.' }}</div>
+                        <div class="summary-content"></div>
                     </div>
                 </div>
-                <a href="{{ article.link }}" target="_blank" class="original-btn">원문 보기</a>
+                <div class="btn-row">
+                    <a href="{{ article.link }}" target="_blank" class="original-btn">원문 보기</a>
+                    <button class="summarize-btn" onclick="summarizeArticle({{ loop.index0 }})">요약하기</button>
+                </div>
             </div>
             {% endfor %}
         {% elif active_feed is none %}
             <div class="empty-state">왼쪽에서 뉴스 제공자를 선택하세요.</div>
         {% endif %}
     </main>
+
+    <script>
+    const articles = [
+        {% for article in articles %}
+        { title: {{ article.title | tojson }}, body: {{ article.body | tojson }}, link: {{ article.link | tojson }} },
+        {% endfor %}
+    ];
+
+    async function summarizeArticle(idx) {
+        const btn = document.querySelectorAll('.summarize-btn')[idx];
+        const summaryDiv = document.getElementById('summary-' + idx);
+        const contentDiv = summaryDiv.querySelector('.summary-content');
+
+        btn.disabled = true;
+        btn.textContent = '요약 중...';
+        summaryDiv.classList.add('visible');
+        contentDiv.textContent = 'AI가 요약하는 중입니다...';
+
+        try {
+            const res = await fetch('/api/summarize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(articles[idx])
+            });
+            const data = await res.json();
+            contentDiv.textContent = data.summary;
+            btn.textContent = '요약 완료';
+        } catch (e) {
+            contentDiv.textContent = '요약 중 오류가 발생했습니다.';
+            btn.textContent = '요약하기';
+            btn.disabled = false;
+        }
+    }
+    </script>
 </body>
 </html>
 """
@@ -471,6 +509,20 @@ def generate_ppt(articles):
     prs.save(output)
     output.seek(0)
     return output
+
+
+@app.post("/api/summarize")
+async def api_summarize(request: Request):
+    """개별 기사 요약 API"""
+    data = await request.json()
+    title = data.get("title", "")
+    body = data.get("body", "")
+    link = data.get("link", "")
+    summary = await summarize_article(title, body)
+    # DB에도 저장
+    if summary and link:
+        save_articles_to_db([{"title": title, "body": body, "link": link, "summary": summary}])
+    return JSONResponse({"summary": summary})
 
 
 @app.get("/download-ppt")
