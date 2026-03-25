@@ -389,6 +389,10 @@ HTML_TEMPLATE = """
             width: 24px; height: 24px; text-align: center; line-height: 24px; font-size: 13px;
             font-weight: bold; margin-right: 8px;
         }
+        .daily-source {
+            display: inline-block; background: #e8f0fe; color: #1a73e8; font-size: 12px;
+            font-weight: 600; padding: 3px 10px; border-radius: 12px; margin-bottom: 8px;
+        }
 
         @media (max-width: 900px) {
             .sidebar { width: 60px; min-width: 60px; }
@@ -458,31 +462,19 @@ HTML_TEMPLATE = """
             </div>
             {% endfor %}
         {% elif active_feed is none %}
-            <div class="home-screen">
+            <div class="content-header">
+                <h1>Daily News</h1>
+                <div style="display:flex;gap:10px;">
+                    <button class="ppt-btn" onclick="downloadDailyPPT()" id="daily-ppt-btn" style="display:none;">PPT 다운로드</button>
+                    <button onclick="clearDaily()" id="daily-clear-btn" style="display:none;padding:12px 24px;background:#e74c3c;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;">전체 삭제</button>
+                </div>
+            </div>
+            <div id="daily-empty" class="home-screen" style="padding-top:40px;">
                 <div class="home-icon">📰</div>
-                <h2 class="home-title">뉴스 핵심 요약 서비스</h2>
-                <p class="home-desc">AI가 뉴스 기사를 읽고 핵심만 요약해 드립니다</p>
-                <div class="home-feeds">
-                    {% for feed in feeds %}
-                    <a href="/?feed={{ loop.index0 }}" class="home-feed-card"
-                       onclick="document.getElementById('loading').style.display='block';">
-                        {{ feed.name }}
-                    </a>
-                    {% endfor %}
-                </div>
-                <p class="home-hint">왼쪽 메뉴 또는 위 카드를 클릭하여 시작하세요</p>
+                <h2 class="home-title">Daily News가 비어 있습니다</h2>
+                <p class="home-desc">왼쪽 메뉴에서 뉴스 제공자를 선택한 후<br>"Daily News 로 선택" 버튼을 눌러 기사를 추가하세요</p>
             </div>
-
-            <div id="daily-section" style="display:none; margin-top: 10px;">
-                <div class="content-header">
-                    <h1>Daily News 선택 목록</h1>
-                    <div style="display:flex;gap:10px;">
-                        <button class="ppt-btn" onclick="downloadDailyPPT()">PPT 다운로드</button>
-                        <button onclick="clearDaily()" style="padding:12px 24px;background:#e74c3c;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;">전체 삭제</button>
-                    </div>
-                </div>
-                <div id="daily-list"></div>
-            </div>
+            <div id="daily-list"></div>
         {% endif %}
     </main>
 
@@ -492,6 +484,7 @@ HTML_TEMPLATE = """
         { title: {{ article.title | tojson }}, body: {{ article.body | tojson }}, link: {{ article.link | tojson }} },
         {% endfor %}
     ];
+    const currentFeedName = {{ (feeds[active_feed].name if active_feed is not none else "") | tojson }};
 
     // Daily News localStorage 관리
     function getDailyNews() {
@@ -541,7 +534,7 @@ HTML_TEMPLATE = """
 
             // localStorage에 저장
             const daily = getDailyNews();
-            daily.push({ title: article.title, link: article.link, summary: data.summary });
+            daily.push({ title: article.title, link: article.link, summary: data.summary, source: currentFeedName });
             saveDailyNews(daily);
 
             btn.textContent = '선택됨';
@@ -585,20 +578,28 @@ HTML_TEMPLATE = """
 
     // Home 화면: 선택된 Daily News 목록 렌더링
     function renderDailyList() {
-        const section = document.getElementById('daily-section');
         const listDiv = document.getElementById('daily-list');
-        if (!section || !listDiv) return;
+        const emptyDiv = document.getElementById('daily-empty');
+        const pptBtn = document.getElementById('daily-ppt-btn');
+        const clearBtn = document.getElementById('daily-clear-btn');
+        if (!listDiv) return;
 
         const daily = getDailyNews();
         if (daily.length === 0) {
-            section.style.display = 'none';
+            if (emptyDiv) emptyDiv.style.display = '';
+            if (pptBtn) pptBtn.style.display = 'none';
+            if (clearBtn) clearBtn.style.display = 'none';
+            listDiv.innerHTML = '';
             return;
         }
-        section.style.display = 'block';
+        if (emptyDiv) emptyDiv.style.display = 'none';
+        if (pptBtn) pptBtn.style.display = '';
+        if (clearBtn) clearBtn.style.display = '';
         listDiv.innerHTML = daily.map((item, i) =>
             '<div class="daily-item">' +
                 '<button class="daily-remove" onclick="removeDaily(' + i + ')">×</button>' +
                 '<h3><span class="daily-order">' + (i + 1) + '</span><a href="' + item.link + '" target="_blank">' + item.title + '</a></h3>' +
+                (item.source ? '<span class="daily-source">' + item.source + '</span>' : '') +
                 '<div class="daily-summary">' + item.summary + '</div>' +
             '</div>'
         ).join('');
