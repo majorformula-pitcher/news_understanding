@@ -225,14 +225,14 @@ async def get_news_content(url):
         ]
         body_element = None
         for selector in body_selectors:
-            body_element = soup.select_one(selector)
-            if body_element:
-                # script, style, nav, footer, aside 태그 제거 (복사본에서)
-                for tag in body_element.find_all(['script', 'style', 'nav', 'footer', 'aside', 'iframe', 'header']):
+            el = soup.select_one(selector)
+            if el:
+                # script, style, nav, footer, aside 태그 제거
+                for tag in el.find_all(['script', 'style', 'nav', 'footer', 'aside', 'iframe', 'header']):
                     tag.decompose()
-                if len(body_element.get_text(strip=True)) > 100:
+                if len(el.get_text(strip=True)) > 100:
+                    body_element = el
                     break
-            body_element = None
 
         if body_element:
             body = body_element.get_text(separator='\n', strip=True)
