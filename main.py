@@ -149,45 +149,123 @@ async def summarize_article(title, body):
 
 async def get_news_content(url):
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Cache-Control": "no-cache",
     }
+    error_reason = ""
     try:
-        async with httpx.AsyncClient(follow_redirects=True) as h_client:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as h_client:
             response = await h_client.get(url, headers=headers)
-            response.raise_for_status()
+            status_code = response.status_code
+            if status_code == 403:
+                error_reason = f"[추출 실패] HTTP 403 Forbidden — 이 사이트는 봇 접근을 차단하고 있습니다. (페이월 또는 봇 방지)"
+                return "추출 실패", error_reason
+            elif status_code == 401:
+                error_reason = f"[추출 실패] HTTP 401 Unauthorized — 로그인이 필요한 페이지입니다."
+                return "추출 실패", error_reason
+            elif status_code >= 400:
+                error_reason = f"[추출 실패] HTTP {status_code} — 서버에서 요청을 거부했습니다."
+                return "추출 실패", error_reason
             html_text = response.text
-            
-        soup = BeautifulSoup(html_text, 'html.parser')
-        
-        title_selectors = ['h2.title', 'h2.title_news', 'div.article_title h2', 'h1', 'h2']
-        title_element = None
-        for selector in title_selectors:
-            title_element = soup.select_one(selector)
-            if title_element and title_element.get_text(strip=True):
-                break
-        
-        title = title_element.get_text(strip=True) if title_element else "제목을 찾을 수 없음"
 
-        body_selectors = ['div.article_txt', 'div.article_body', '[itemprop="articleBody"]', 'div#articleBody', 'div.entry-content', 'div.blog-content', 'article', 'div.content']
+        # JavaScript 렌더링 전용 페이지 감지
+        if len(html_text.strip()) < 500 and ('javascript' in html_text.lower() or 'noscript' in html_text.lower()):
+            error_reason = "[추출 실패] 이 페이지는 JavaScript로 렌더링되어 서버에서 직접 추출할 수 없습니다."
+            return "추출 실패", error_reason
+
+        soup = BeautifulSoup(html_text, 'html.parser')
+
+        # --- 제목 추출 (meta 태그 우선) ---
+        title = ""
+        og_title = soup.find('meta', property='og:title')
+        if og_title and og_title.get('content', '').strip():
+            title = og_title['content'].strip()
+        else:
+            twitter_title = soup.find('meta', attrs={'name': 'twitter:title'})
+            if twitter_title and twitter_title.get('content', '').strip():
+                title = twitter_title['content'].strip()
+
+        if not title:
+            title_selectors = ['h2.title', 'h2.title_news', 'div.article_title h2', 'h1.article-title', 'h1.headline', 'h1[data-testid]', 'h1', 'h2']
+            for selector in title_selectors:
+                el = soup.select_one(selector)
+                if el and el.get_text(strip=True):
+                    title = el.get_text(strip=True)
+                    break
+
+        if not title:
+            title_tag = soup.find('title')
+            title = title_tag.get_text(strip=True) if title_tag else "제목을 찾을 수 없음"
+
+        # --- 본문 추출 ---
+        body_selectors = [
+            # 한국 뉴스 사이트
+            'div.article_txt', 'div.article_body', 'div#articleBody',
+            'div#article-view-content-div', 'div.news_cnt_detail_wrap',
+            # 국제 뉴스 사이트
+            '[itemprop="articleBody"]', 'div.article-body', 'div.article__body',
+            'div.story-body', 'div.article-content', 'div.post-content',
+            'div.body-content', 'section.article-body',
+            'div[data-component="text-block"]',
+            # 블로그/일반
+            'div.entry-content', 'div.blog-content', 'main article',
+            'article', 'div.content', 'main',
+        ]
         body_element = None
         for selector in body_selectors:
             body_element = soup.select_one(selector)
-            if body_element and body_element.get_text(strip=True):
+            if body_element and len(body_element.get_text(strip=True)) > 100:
                 break
+            body_element = None
 
         if body_element:
+            # script, style, nav, footer, aside 태그 제거
+            for tag in body_element.find_all(['script', 'style', 'nav', 'footer', 'aside', 'iframe']):
+                tag.decompose()
             body = body_element.get_text(separator='\n', strip=True)
-            body = re.sub(r'(?:이메일|email|e-mail)\s*[:\s]*\s*[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', '', body, flags=re.IGNORECASE)
-            body = re.sub(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', '', body)
-            body = re.sub(r'[가-힣]{2,4}\s*기자(?!\w)', '', body)
-            body = re.sub(r'\[\s*\]|\(\s*\)', '', body)
-            body = '\n'.join([line.strip() for line in body.split('\n') if line.strip()])
         else:
-            body = "본문을 찾을 수 없습니다."
+            # meta description 폴백
+            body = ""
+            og_desc = soup.find('meta', property='og:description')
+            if og_desc and og_desc.get('content', '').strip():
+                body = og_desc['content'].strip()
+            else:
+                meta_desc = soup.find('meta', attrs={'name': 'description'})
+                if meta_desc and meta_desc.get('content', '').strip():
+                    body = meta_desc['content'].strip()
+
+            if not body:
+                # <p> 태그에서 텍스트 수집
+                paragraphs = soup.find_all('p')
+                p_texts = [p.get_text(strip=True) for p in paragraphs if len(p.get_text(strip=True)) > 40]
+                if p_texts:
+                    body = '\n'.join(p_texts)
+
+            if not body:
+                error_reason = "[추출 실패] 이 페이지에서 뉴스 본문 영역을 찾을 수 없습니다. 페이월, JavaScript 렌더링, 또는 비표준 HTML 구조일 수 있습니다."
+                return title or "추출 실패", error_reason
+
+        # 텍스트 정제
+        body = re.sub(r'(?:이메일|email|e-mail)\s*[:\s]*\s*[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', '', body, flags=re.IGNORECASE)
+        body = re.sub(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', '', body)
+        body = re.sub(r'[가-힣]{2,4}\s*기자(?!\w)', '', body)
+        body = re.sub(r'\[\s*\]|\(\s*\)', '', body)
+        body = '\n'.join([line.strip() for line in body.split('\n') if line.strip()])
+
+        if len(body) < 50:
+            error_reason = f"[추출 실패] 본문이 너무 짧습니다 ({len(body)}자). 페이월이 있거나 JavaScript로 렌더링되는 페이지일 수 있습니다."
+            return title or "추출 실패", error_reason
 
         return title, body
+    except httpx.TimeoutException:
+        return "추출 실패", "[추출 실패] 요청 시간이 초과되었습니다 (15초). 서버가 응답하지 않거나 봇 접근을 차단하고 있을 수 있습니다."
+    except httpx.ConnectError:
+        return "추출 실패", f"[추출 실패] 서버에 연결할 수 없습니다. URL을 확인해주세요: {url}"
     except Exception as e:
-        return f"오류 발생: {e}", ""
+        return "추출 실패", f"[추출 실패] {type(e).__name__}: {e}"
 
 async def parse_rss_and_fetch_news(rss_url):
     headers = {
@@ -337,6 +415,9 @@ HTML_TEMPLATE = """
         .summarize-btn:disabled { background-color: #ccc; cursor: not-allowed; }
 
         .error-msg { background: #fff5f5; color: #c92a2a; padding: 15px; border-radius: 8px; border: 1px solid #ffc9c9; margin-bottom: 20px; }
+        .result-item.extraction-error { border-left: 4px solid #e03131; background: #fff8f8; }
+        .result-item.extraction-error h2 a { color: #c92a2a; }
+        .error-detail { color: #c92a2a; font-size: 14px; padding: 12px 16px; background: #fff0f0; border-radius: 6px; border: 1px solid #ffc9c9; white-space: pre-wrap; line-height: 1.6; }
         .loading-overlay { display: none; text-align: center; color: #1a73e8; font-weight: bold; font-size: 18px; padding: 40px 0; }
         .db-error { font-size: 13px; color: #c92a2a; background: #fff5f5; border: 1px solid #ffc9c9; border-radius: 8px; padding: 8px 15px; margin-bottom: 15px; }
         .empty-state { text-align: center; color: #888; padding: 60px 20px; font-size: 18px; }
@@ -688,21 +769,22 @@ HTML_TEMPLATE = """
             customArticles = data.articles || [];
 
             container.innerHTML = customArticles.map((a, i) =>
-                '<div class="result-item" id="custom-article-' + i + '">' +
+                '<div class="result-item' + (a.error ? ' extraction-error' : '') + '" id="custom-article-' + i + '">' +
                     '<h2 style="display:flex;align-items:center;justify-content:space-between;gap:12px;">' +
-                        '<a href="' + a.link + '" target="_blank" style="flex:1;">' + a.title + '</a>' +
-                        '<button class="daily-btn" onclick="selectCustomForDaily(' + i + ')" id="custom-daily-btn-' + i + '">Daily News 로 선택</button>' +
+                        '<a href="' + a.link + '" target="_blank" style="flex:1;">' + (a.error ? '⚠ ' + (a.title !== '추출 실패' ? a.title : new URL(a.link).hostname) : a.title) + '</a>' +
+                        (a.error ? '' : '<button class="daily-btn" onclick="selectCustomForDaily(' + i + ')" id="custom-daily-btn-' + i + '">Daily News 로 선택</button>') +
                     '</h2>' +
                     '<div class="article-layout">' +
-                        '<div class="article-body">' + a.body + '</div>' +
+                        '<div class="article-body">' + (a.error ? '<div class="error-detail">' + a.body + '</div>' : a.body) + '</div>' +
+                        (a.error ? '' :
                         '<div class="summary-section" id="custom-summary-' + i + '">' +
                             '<h3>요약</h3>' +
                             '<div class="summary-content"></div>' +
-                        '</div>' +
+                        '</div>') +
                     '</div>' +
                     '<div class="btn-row">' +
                         '<a href="' + a.link + '" target="_blank" class="original-btn">원문 보기</a>' +
-                        '<button class="summarize-btn" onclick="summarizeCustom(' + i + ')">요약하기</button>' +
+                        (a.error ? '' : '<button class="summarize-btn" onclick="summarizeCustom(' + i + ')">요약하기</button>') +
                     '</div>' +
                 '</div>'
             ).join('');
@@ -896,9 +978,8 @@ async def api_fetch_urls(request: Request):
     results = await asyncio.gather(*fetch_tasks)
     articles = []
     for (title, body), url in zip(results, urls[:20]):
-        if title.startswith("오류 발생:"):
-            continue
-        articles.append({"title": title, "body": body, "link": url})
+        is_error = title == "추출 실패" or body.startswith("[추출 실패]")
+        articles.append({"title": title, "body": body, "link": url, "error": is_error})
     return JSONResponse({"articles": articles})
 
 
