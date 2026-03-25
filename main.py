@@ -23,7 +23,7 @@ RSS_FEEDS = [
     {"name": "로봇신문-로봇", "url": "https://www.irobotnews.com/rss/S1N1.xml"},
     {"name": "전자신문-AI", "url": "http://rss.etnews.com/04046.xml"},
     {"name": "The AI", "url": "https://www.newstheai.com/rss/allArticle.xml"},
-    {"name": "ZDNet Korea", "url": "https://news.google.com/rss/search?q=site:zdnet.co.kr+when:2d&hl=ko&gl=KR&ceid=KR:ko"},
+    {"name": "ZDNet Korea", "url": "https://zdnet.co.kr/feed"},
     {"name": "TechCrunch", "url": "https://techcrunch.com/category/artificial-intelligence/feed/"},
     {"name": "The Verge", "url": "https://www.theverge.com/rss/index.xml"},
     {"name": "Wired", "url": "https://www.wired.com/feed/category/business/latest/rss"},
