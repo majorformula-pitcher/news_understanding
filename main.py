@@ -601,12 +601,6 @@ HTML_TEMPLATE = """
     </main>
 
     <script>
-    window.onerror = function(msg, url, line, col, error) {
-        var d = document.createElement('div');
-        d.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#ff0;color:red;padding:16px;font-size:14px;font-family:monospace;white-space:pre-wrap;';
-        d.textContent = 'JS ERROR [line ' + line + ']: ' + msg + '\n' + (error ? error.stack : '');
-        document.body.appendChild(d);
-    };
     const articles = [
         {% for article in articles %}
         { title: {{ article.title | tojson }}, body: {{ article.body | tojson }}, link: {{ article.link | tojson }} },
@@ -803,7 +797,7 @@ HTML_TEMPLATE = """
                 const cssClass = a.error ? ' extraction-error' : (a.paywall ? ' extraction-partial' : '');
                 const displayTitle = a.error ? '⚠ ' + (a.title !== '추출 실패' ? a.title : new URL(a.link).hostname) : a.title;
                 const bodyHtml = a.error ? '<div class="error-detail">' + a.body + '</div>'
-                    : a.paywall ? '<div class="paywall-notice">⚠ 페이월 또는 접근 제한으로 전체 본문을 가져올 수 없습니다. 요약 정보만 표시됩니다.</div>' + a.body.replace(/^\[페이월\/접근 제한\][^\n]*\n\n/, '')
+                    : a.paywall ? '<div class="paywall-notice">⚠ 페이월 또는 접근 제한으로 전체 본문을 가져올 수 없습니다. 요약 정보만 표시됩니다.</div>' + a.body.replace(/^\[페이월\\/접근 제한\][^\\n]*\\n\\n/, '')
                     : a.body;
                 const showActions = !a.error;
                 return '<div class="result-item' + cssClass + '" id="custom-article-' + i + '">' +
