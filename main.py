@@ -601,6 +601,12 @@ HTML_TEMPLATE = """
     </main>
 
     <script>
+    window.onerror = function(msg, url, line, col, error) {
+        var d = document.createElement('div');
+        d.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#ff0;color:red;padding:16px;font-size:14px;font-family:monospace;white-space:pre-wrap;';
+        d.textContent = 'JS ERROR [line ' + line + ']: ' + msg + '\n' + (error ? error.stack : '');
+        document.body.appendChild(d);
+    };
     const articles = [
         {% for article in articles %}
         { title: {{ article.title | tojson }}, body: {{ article.body | tojson }}, link: {{ article.link | tojson }} },
