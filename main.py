@@ -421,6 +421,10 @@ HTML_TEMPLATE = """
             {{ feed.name }}
         </a>
         {% endfor %}
+        <a href="/?feed=custom"
+           class="feed-tab {% if active_feed == 'custom' %}active{% endif %}">
+            직접 입력
+        </a>
     </nav>
 
     <!-- 오른쪽 콘텐츠 영역 -->
@@ -429,7 +433,7 @@ HTML_TEMPLATE = """
         <div class="db-error">Supabase 오류: {{ db_error }}</div>
         {% endif %}
 
-        {% if active_feed is not none %}
+        {% if active_feed is not none and active_feed != 'custom' %}
         <div class="content-header">
             <h1>{{ feeds[active_feed].name }}</h1>
         </div>
@@ -461,6 +465,18 @@ HTML_TEMPLATE = """
                 </div>
             </div>
             {% endfor %}
+        {% elif active_feed == 'custom' %}
+            <div class="content-header">
+                <h1>직접 입력</h1>
+            </div>
+            <div class="result-item">
+                <textarea id="custom-input" placeholder="뉴스 URL이 포함된 텍스트를 붙여넣으세요..." style="width:100%;height:180px;padding:15px;border:1px solid #ddd;border-radius:8px;font-size:15px;line-height:1.6;resize:vertical;font-family:inherit;"></textarea>
+                <div style="margin-top:12px;">
+                    <button onclick="extractUrls()" class="summarize-btn" id="extract-btn" style="padding:10px 24px;font-size:15px;">뉴스 추출</button>
+                </div>
+            </div>
+            <div id="custom-loading" class="loading-overlay">URL에서 뉴스를 불러오는 중입니다...</div>
+            <div id="custom-articles"></div>
         {% elif active_feed is none %}
             <div class="content-header">
                 <h1>Daily News</h1>
@@ -484,7 +500,7 @@ HTML_TEMPLATE = """
         { title: {{ article.title | tojson }}, body: {{ article.body | tojson }}, link: {{ article.link | tojson }} },
         {% endfor %}
     ];
-    const currentFeedName = {{ (feeds[active_feed].name if active_feed is not none else "") | tojson }};
+    const currentFeedName = {{ (feeds[active_feed].name if active_feed is not none and active_feed != 'custom' else "") | tojson }};
 
     // Daily News localStorage 관리
     function getDailyNews() {
@@ -641,6 +657,139 @@ HTML_TEMPLATE = """
         }
     }
 
+    // 직접 입력: URL 추출 및 기사 표시
+    let customArticles = [];
+
+    async function extractUrls() {
+        const input = document.getElementById('custom-input');
+        const btn = document.getElementById('extract-btn');
+        const loadingDiv = document.getElementById('custom-loading');
+        const container = document.getElementById('custom-articles');
+        if (!input || !input.value.trim()) return;
+
+        // URL 추출
+        const urlRegex = /https?:\/\/[^\s<>"')\]]+/g;
+        const urls = [...new Set(input.value.match(urlRegex) || [])];
+        if (urls.length === 0) { alert('URL을 찾을 수 없습니다.'); return; }
+
+        btn.disabled = true;
+        btn.textContent = '추출 중...';
+        if (loadingDiv) loadingDiv.style.display = 'block';
+        container.innerHTML = '';
+        customArticles = [];
+
+        try {
+            const res = await fetch('/api/fetch-urls', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ urls: urls })
+            });
+            const data = await res.json();
+            customArticles = data.articles || [];
+
+            container.innerHTML = customArticles.map((a, i) =>
+                '<div class="result-item" id="custom-article-' + i + '">' +
+                    '<h2 style="display:flex;align-items:center;justify-content:space-between;gap:12px;">' +
+                        '<a href="' + a.link + '" target="_blank" style="flex:1;">' + a.title + '</a>' +
+                        '<button class="daily-btn" onclick="selectCustomForDaily(' + i + ')" id="custom-daily-btn-' + i + '">Daily News 로 선택</button>' +
+                    '</h2>' +
+                    '<div class="article-layout">' +
+                        '<div class="article-body">' + a.body + '</div>' +
+                        '<div class="summary-section" id="custom-summary-' + i + '">' +
+                            '<h3>요약</h3>' +
+                            '<div class="summary-content"></div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="btn-row">' +
+                        '<a href="' + a.link + '" target="_blank" class="original-btn">원문 보기</a>' +
+                        '<button class="summarize-btn" onclick="summarizeCustom(' + i + ')">요약하기</button>' +
+                    '</div>' +
+                '</div>'
+            ).join('');
+
+            // 이미 선택된 기사 버튼 상태 업데이트
+            const daily = getDailyNews();
+            const dailyLinks = daily.map(d => d.link);
+            customArticles.forEach((a, i) => {
+                const dbtn = document.getElementById('custom-daily-btn-' + i);
+                if (dbtn && dailyLinks.includes(a.link)) {
+                    dbtn.textContent = '선택됨';
+                    dbtn.disabled = true;
+                    dbtn.classList.add('selected');
+                }
+            });
+        } catch (e) {
+            container.innerHTML = '<div class="error-msg">URL 처리 중 오류가 발생했습니다.</div>';
+        }
+        btn.disabled = false;
+        btn.textContent = '뉴스 추출';
+        if (loadingDiv) loadingDiv.style.display = 'none';
+    }
+
+    async function summarizeCustom(idx) {
+        const btns = document.querySelectorAll('#custom-articles .summarize-btn');
+        const btn = btns[idx];
+        const summaryDiv = document.getElementById('custom-summary-' + idx);
+        const contentDiv = summaryDiv.querySelector('.summary-content');
+
+        btn.disabled = true;
+        btn.textContent = '요약 중...';
+        summaryDiv.classList.add('visible');
+        contentDiv.textContent = 'AI가 요약하는 중입니다...';
+
+        try {
+            const res = await fetch('/api/summarize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(customArticles[idx])
+            });
+            const data = await res.json();
+            contentDiv.textContent = data.summary;
+            btn.textContent = '요약 완료';
+        } catch (e) {
+            contentDiv.textContent = '요약 중 오류가 발생했습니다.';
+            btn.textContent = '요약하기';
+            btn.disabled = false;
+        }
+    }
+
+    async function selectCustomForDaily(idx) {
+        const btn = document.getElementById('custom-daily-btn-' + idx);
+        const article = customArticles[idx];
+
+        btn.disabled = true;
+        btn.textContent = '요약 중...';
+
+        const summaryDiv = document.getElementById('custom-summary-' + idx);
+        const contentDiv = summaryDiv.querySelector('.summary-content');
+        summaryDiv.classList.add('visible');
+        contentDiv.textContent = 'AI가 요약하는 중입니다...';
+
+        try {
+            const res = await fetch('/api/summarize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(article)
+            });
+            const data = await res.json();
+            contentDiv.textContent = data.summary;
+
+            const daily = getDailyNews();
+            daily.push({ title: article.title, link: article.link, summary: data.summary, source: '직접 입력' });
+            saveDailyNews(daily);
+
+            btn.textContent = '선택됨';
+            btn.classList.add('selected');
+
+            const sumBtns = document.querySelectorAll('#custom-articles .summarize-btn');
+            if (sumBtns[idx]) { sumBtns[idx].textContent = '요약 완료'; sumBtns[idx].disabled = true; }
+        } catch (e) {
+            contentDiv.textContent = '요약 중 오류가 발생했습니다.';
+            btn.textContent = 'Daily News 로 선택';
+            btn.disabled = false;
+        }
+    }
+
     // 초기화
     updateDailyBtnStates();
     renderDailyList();
@@ -738,6 +887,21 @@ async def api_summarize(request: Request):
     return JSONResponse({"summary": summary})
 
 
+@app.post("/api/fetch-urls")
+async def api_fetch_urls(request: Request):
+    """URL 목록에서 뉴스 제목/본문 추출"""
+    data = await request.json()
+    urls = data.get("urls", [])
+    fetch_tasks = [get_news_content(url) for url in urls[:20]]
+    results = await asyncio.gather(*fetch_tasks)
+    articles = []
+    for (title, body), url in zip(results, urls[:20]):
+        if title.startswith("오류 발생:"):
+            continue
+        articles.append({"title": title, "body": body, "link": url})
+    return JSONResponse({"articles": articles})
+
+
 @app.post("/api/daily-ppt")
 async def daily_ppt(request: Request):
     """Daily News 선택 기사들로 PPT 생성"""
@@ -754,18 +918,23 @@ async def daily_ppt(request: Request):
 
 
 @app.get("/", response_class=HTMLResponse)
-async def get_index(feed: int = None):
+async def get_index(feed: str = None):
     template = Template(HTML_TEMPLATE)
     articles, error = [], None
-    active_feed = feed
+    active_feed = None
 
-    if feed is not None and 0 <= feed < len(RSS_FEEDS):
+    if feed == "custom":
+        active_feed = "custom"
+    elif feed is not None:
         try:
-            rss_url = RSS_FEEDS[feed]["url"]
-            articles = await parse_rss_and_fetch_news(rss_url)
-            if articles:
-                save_articles_to_db(articles)
-        except Exception as e:
+            feed_idx = int(feed)
+            if 0 <= feed_idx < len(RSS_FEEDS):
+                active_feed = feed_idx
+                rss_url = RSS_FEEDS[feed_idx]["url"]
+                articles = await parse_rss_and_fetch_news(rss_url)
+                if articles:
+                    save_articles_to_db(articles)
+        except (ValueError, Exception) as e:
             error = str(e)
 
     return HTMLResponse(content=template.render(
