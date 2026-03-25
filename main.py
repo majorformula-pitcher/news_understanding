@@ -636,12 +636,26 @@ HTML_TEMPLATE = """
         const btn = document.getElementById('daily-btn-' + idx);
         const article = articles[idx];
 
+        // 이미 요약이 완료된 상태인지 확인
+        const summaryDiv = document.getElementById('summary-' + idx);
+        const contentDiv = summaryDiv.querySelector('.summary-content');
+        const existingSummary = summaryDiv.classList.contains('visible') ? contentDiv.textContent : null;
+
+        if (existingSummary && existingSummary !== 'AI가 요약하는 중입니다...' && existingSummary !== '요약 중 오류가 발생했습니다.') {
+            // 이미 요약된 내용이 있으면 바로 선택
+            btn.disabled = true;
+            const daily = getDailyNews();
+            daily.push({ title: article.title, link: article.link, summary: existingSummary, source: currentFeedName });
+            saveDailyNews(daily);
+            btn.textContent = '선택됨';
+            btn.classList.add('selected');
+            return;
+        }
+
         btn.disabled = true;
         btn.textContent = '요약 중...';
 
         // 요약도 같이 표시
-        const summaryDiv = document.getElementById('summary-' + idx);
-        const contentDiv = summaryDiv.querySelector('.summary-content');
         summaryDiv.classList.add('visible');
         contentDiv.textContent = 'AI가 요약하는 중입니다...';
 
@@ -869,11 +883,25 @@ HTML_TEMPLATE = """
         const btn = document.getElementById('custom-daily-btn-' + idx);
         const article = customArticles[idx];
 
+        // 이미 요약이 완료된 상태인지 확인
+        const summaryDiv = document.getElementById('custom-summary-' + idx);
+        const contentDiv = summaryDiv.querySelector('.summary-content');
+        const existingSummary = summaryDiv.classList.contains('visible') ? contentDiv.textContent : null;
+
+        if (existingSummary && existingSummary !== 'AI가 요약하는 중입니다...' && existingSummary !== '요약 중 오류가 발생했습니다.') {
+            // 이미 요약된 내용이 있으면 바로 선택
+            btn.disabled = true;
+            const daily = getDailyNews();
+            daily.push({ title: article.title, link: article.link, summary: existingSummary, source: '직접 입력' });
+            saveDailyNews(daily);
+            btn.textContent = '선택됨';
+            btn.classList.add('selected');
+            return;
+        }
+
         btn.disabled = true;
         btn.textContent = '요약 중...';
 
-        const summaryDiv = document.getElementById('custom-summary-' + idx);
-        const contentDiv = summaryDiv.querySelector('.summary-content');
         summaryDiv.classList.add('visible');
         contentDiv.textContent = 'AI가 요약하는 중입니다...';
 
