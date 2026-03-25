@@ -815,7 +815,7 @@ HTML_TEMPLATE = """
                     '</div>' +
                     '<div class="btn-row">' +
                         '<a href="' + a.link + '" target="_blank" class="original-btn">원문 보기</a>' +
-                        (showActions ? '<button class="summarize-btn" onclick="summarizeCustom(' + i + ')">요약하기</button>' : '') +
+                        (showActions ? '<button class="summarize-btn" id="custom-sum-btn-' + i + '" onclick="summarizeCustom(' + i + ')">요약하기</button>' : '') +
                     '</div>' +
                 '</div>';
             }).join('');
@@ -840,8 +840,7 @@ HTML_TEMPLATE = """
     }
 
     async function summarizeCustom(idx) {
-        const btns = document.querySelectorAll('#custom-articles .summarize-btn');
-        const btn = btns[idx];
+        const btn = document.getElementById('custom-sum-btn-' + idx);
         const summaryDiv = document.getElementById('custom-summary-' + idx);
         const contentDiv = summaryDiv.querySelector('.summary-content');
 
@@ -894,8 +893,8 @@ HTML_TEMPLATE = """
             btn.textContent = '선택됨';
             btn.classList.add('selected');
 
-            const sumBtns = document.querySelectorAll('#custom-articles .summarize-btn');
-            if (sumBtns[idx]) { sumBtns[idx].textContent = '요약 완료'; sumBtns[idx].disabled = true; }
+            const sumBtn = document.getElementById('custom-sum-btn-' + idx);
+            if (sumBtn) { sumBtn.textContent = '요약 완료'; sumBtn.disabled = true; }
         } catch (e) {
             contentDiv.textContent = '요약 중 오류가 발생했습니다.';
             btn.textContent = 'Daily News 로 선택';
