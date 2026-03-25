@@ -170,18 +170,18 @@ async def get_news_content(url):
                 err_desc = og_d['content'].strip() if og_d and og_d.get('content') else ""
                 if err_title and err_desc:
                     reason = "[페이월/접근 제한] 전체 본문을 가져올 수 없어 요약 정보만 표시합니다."
-                    return err_title, reason + "\n\n" + err_desc
+                    return err_title, reason + "\n\n" + err_desc, ""
                 if status_code == 403:
-                    return "추출 실패", "[추출 실패] HTTP 403 Forbidden — 이 사이트는 봇 접근을 차단하고 있습니다. (페이월 또는 봇 방지)"
+                    return "추출 실패", "[추출 실패] HTTP 403 Forbidden — 이 사이트는 봇 접근을 차단하고 있습니다. (페이월 또는 봇 방지)", ""
                 elif status_code == 401:
-                    return "추출 실패", "[추출 실패] HTTP 401 Unauthorized — 로그인이 필요한 페이지입니다."
+                    return "추출 실패", "[추출 실패] HTTP 401 Unauthorized — 로그인이 필요한 페이지입니다.", ""
                 else:
-                    return "추출 실패", f"[추출 실패] HTTP {status_code} — 서버에서 요청을 거부했습니다."
+                    return "추출 실패", f"[추출 실패] HTTP {status_code} — 서버에서 요청을 거부했습니다.", ""
 
         # JavaScript 렌더링 전용 페이지 감지
         if len(html_text.strip()) < 500 and ('javascript' in html_text.lower() or 'noscript' in html_text.lower()):
             error_reason = "[추출 실패] 이 페이지는 JavaScript로 렌더링되어 서버에서 직접 추출할 수 없습니다."
-            return "추출 실패", error_reason
+            return "추출 실패", error_reason, ""
 
         soup = BeautifulSoup(html_text, 'html.parser')
 
@@ -206,6 +206,18 @@ async def get_news_content(url):
         if not title:
             title_tag = soup.find('title')
             title = title_tag.get_text(strip=True) if title_tag else "제목을 찾을 수 없음"
+
+        # --- 날짜 추출 (meta 태그) ---
+        pub_date = ""
+        for meta_prop in ['article:published_time', 'og:article:published_time', 'datePublished']:
+            meta_el = soup.find('meta', property=meta_prop) or soup.find('meta', attrs={'name': meta_prop})
+            if meta_el and meta_el.get('content', '').strip():
+                pub_date = meta_el['content'].strip()
+                break
+        if not pub_date:
+            time_el = soup.find('time', attrs={'datetime': True})
+            if time_el:
+                pub_date = time_el['datetime'].strip()
 
         # --- 본문 추출 ---
         body_selectors = [
@@ -259,7 +271,7 @@ async def get_news_content(url):
 
             if not body:
                 error_reason = "[추출 실패] 이 페이지에서 뉴스 본문 영역을 찾을 수 없습니다. 페이월, JavaScript 렌더링, 또는 비표준 HTML 구조일 수 있습니다."
-                return title or "추출 실패", error_reason
+                return title or "추출 실패", error_reason, pub_date
 
         # 텍스트 정제
         body = re.sub(r'(?:이메일|email|e-mail)\s*[:\s]*\s*[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', '', body, flags=re.IGNORECASE)
@@ -278,17 +290,17 @@ async def get_news_content(url):
             elif meta_desc_tag and meta_desc_tag.get('content', '').strip():
                 fallback = meta_desc_tag['content'].strip()
             if fallback:
-                return title or "추출 실패", "[페이월/접근 제한] 전체 본문을 가져올 수 없어 요약 정보만 표시합니다.\n\n" + fallback
+                return title or "추출 실패", "[페이월/접근 제한] 전체 본문을 가져올 수 없어 요약 정보만 표시합니다.\n\n" + fallback, pub_date
             error_reason = f"[추출 실패] 본문이 너무 짧습니다 ({len(body)}자). 페이월이 있거나 JavaScript로 렌더링되는 페이지일 수 있습니다."
-            return title or "추출 실패", error_reason
+            return title or "추출 실패", error_reason, pub_date
 
-        return title, body
+        return title, body, pub_date
     except httpx.TimeoutException:
-        return "추출 실패", "[추출 실패] 요청 시간이 초과되었습니다 (15초). 서버가 응답하지 않거나 봇 접근을 차단하고 있을 수 있습니다."
+        return "추출 실패", "[추출 실패] 요청 시간이 초과되었습니다 (15초). 서버가 응답하지 않거나 봇 접근을 차단하고 있을 수 있습니다.", ""
     except httpx.ConnectError:
-        return "추출 실패", f"[추출 실패] 서버에 연결할 수 없습니다. URL을 확인해주세요: {url}"
+        return "추출 실패", f"[추출 실패] 서버에 연결할 수 없습니다. URL을 확인해주세요: {url}", ""
     except Exception as e:
-        return "추출 실패", f"[추출 실패] {type(e).__name__}: {e}"
+        return "추출 실패", f"[추출 실패] {type(e).__name__}: {e}", ""
 
 async def parse_rss_and_fetch_news(rss_url):
     headers = {
@@ -310,21 +322,26 @@ async def parse_rss_and_fetch_news(rss_url):
                 desc_elem = item.find('description')
                 rss_title = title_elem.text.strip() if title_elem is not None and title_elem.text else ""
                 rss_desc = desc_elem.text.strip() if desc_elem is not None and desc_elem.text else ""
-                items.append({'link': link_elem.text, 'rss_title': rss_title, 'rss_desc': rss_desc})
+                pub_date_elem = item.find('pubDate')
+                rss_pub_date = pub_date_elem.text.strip() if pub_date_elem is not None and pub_date_elem.text else ""
+                items.append({'link': link_elem.text, 'rss_title': rss_title, 'rss_desc': rss_desc, 'rss_pub_date': rss_pub_date})
 
         fetch_tasks = [get_news_content(it['link']) for it in items[:10]]
         fetched_results = await asyncio.gather(*fetch_tasks)
 
-        for (title, body), it in zip(fetched_results, items[:10]):
+        for (title, body, page_date), it in zip(fetched_results, items[:10]):
             # 페이지 접근 실패 시 RSS 데이터로 대체
             if title.startswith("오류 발생:") or not body or body == "본문을 찾을 수 없습니다.":
                 title = it['rss_title'] or title
                 body = it['rss_desc'] or body
+            # RSS pubDate 우선, 없으면 페이지에서 추출한 날짜 사용
+            pub_date = it.get('rss_pub_date', '') or page_date
             articles.append({
                 'title': title,
                 'body': body,
                 'link': it['link'],
-                'summary': ''
+                'summary': '',
+                'pub_date': pub_date
             })
     except Exception as e:
         raise Exception(f"RSS 파싱 중 오류 발생: {e}")
@@ -418,6 +435,7 @@ HTML_TEMPLATE = """
         }
         .ppt-btn:hover { background-color: #cf6d17; }
 
+        .article-date { font-size: 12px; color: #888; background: #f5f6f8; padding: 3px 10px; border-radius: 4px; white-space: nowrap; flex-shrink: 0; }
         .result-item { background: white; margin-bottom: 30px; padding: 25px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
         .result-item h2 { margin-top: 0; color: #333; font-size: 22px; border-bottom: 2px solid #f0f2f5; padding-bottom: 12px; }
         .result-item h2 a { text-decoration: none; color: inherit; }
@@ -556,6 +574,7 @@ HTML_TEMPLATE = """
             <div class="result-item" id="article-{{ loop.index0 }}">
                 <h2 style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
                     <a href="{{ article.link }}" target="_blank" style="flex:1;">{{ article.title }}</a>
+                    {% if article.pub_date %}<span class="article-date" data-raw="{{ article.pub_date }}">{{ article.pub_date }}</span>{% endif %}
                     <button class="daily-btn" onclick="selectForDaily({{ loop.index0 }})" id="daily-btn-{{ loop.index0 }}">Daily News 로 선택</button>
                 </h2>
                 <div class="article-layout">
@@ -601,9 +620,23 @@ HTML_TEMPLATE = """
     </main>
 
     <script>
+    function formatPubDate(raw) {
+        if (!raw) return '';
+        try {
+            const d = new Date(raw);
+            if (isNaN(d.getTime())) return raw;
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            const h = String(d.getHours()).padStart(2, '0');
+            const min = String(d.getMinutes()).padStart(2, '0');
+            return y + '.' + m + '.' + day + ' ' + h + ':' + min;
+        } catch { return raw; }
+    }
+
     const articles = [
         {% for article in articles %}
-        { title: {{ article.title | tojson }}, body: {{ article.body | tojson }}, link: {{ article.link | tojson }} },
+        { title: {{ article.title | tojson }}, body: {{ article.body | tojson }}, link: {{ article.link | tojson }}, pub_date: {{ article.pub_date | tojson }} },
         {% endfor %}
     ];
     const currentFeedName = {{ (feeds[active_feed].name if active_feed is not none and active_feed != 'custom' else "") | tojson }};
@@ -616,6 +649,12 @@ HTML_TEMPLATE = """
     function saveDailyNews(list) {
         localStorage.setItem('dailyNews', JSON.stringify(list));
     }
+
+    // 페이지 로드 시 날짜 포맷팅
+    document.querySelectorAll('.article-date[data-raw]').forEach(el => {
+        const formatted = formatPubDate(el.getAttribute('data-raw'));
+        if (formatted) el.textContent = formatted;
+    });
 
     // 페이지 로드 시 이미 선택된 기사 버튼 상태 업데이트
     function updateDailyBtnStates() {
@@ -817,6 +856,7 @@ HTML_TEMPLATE = """
                 return '<div class="result-item' + cssClass + '" id="custom-article-' + i + '">' +
                     '<h2 style="display:flex;align-items:center;justify-content:space-between;gap:12px;">' +
                         '<a href="' + a.link + '" target="_blank" style="flex:1;">' + displayTitle + '</a>' +
+                        (a.pub_date ? '<span class="article-date" data-raw="' + a.pub_date + '">' + formatPubDate(a.pub_date) + '</span>' : '') +
                         (showActions ? '<button class="daily-btn" onclick="selectCustomForDaily(' + i + ')" id="custom-daily-btn-' + i + '">Daily News 로 선택</button>' : '') +
                     '</h2>' +
                     '<div class="article-layout">' +
@@ -1035,10 +1075,10 @@ async def api_fetch_urls(request: Request):
     fetch_tasks = [get_news_content(url) for url in urls[:20]]
     results = await asyncio.gather(*fetch_tasks)
     articles = []
-    for (title, body), url in zip(results, urls[:20]):
+    for (title, body, pub_date), url in zip(results, urls[:20]):
         is_error = title == "추출 실패" or body.startswith("[추출 실패]")
         is_paywall = body.startswith("[페이월/접근 제한]")
-        articles.append({"title": title, "body": body, "link": url, "error": is_error, "paywall": is_paywall})
+        articles.append({"title": title, "body": body, "link": url, "error": is_error, "paywall": is_paywall, "pub_date": pub_date})
     return JSONResponse({"articles": articles})
 
 
