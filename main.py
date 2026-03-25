@@ -23,7 +23,7 @@ RSS_FEEDS = [
     {"name": "로봇신문-로봇", "url": "https://www.irobotnews.com/rss/S1N1.xml"},
     {"name": "전자신문-AI", "url": "http://rss.etnews.com/04046.xml"},
     {"name": "The AI", "url": "https://www.newstheai.com/rss/allArticle.xml"},
-    {"name": "ZDNet", "url": "https://zdnet.co.kr/rss/all.xml"},
+    {"name": "ZDNet Korea", "url": "https://news.google.com/rss/search?q=site:zdnet.co.kr+when:2d&hl=ko&gl=KR&ceid=KR:ko"},
     {"name": "TechCrunch", "url": "https://techcrunch.com/category/artificial-intelligence/feed/"},
     {"name": "The Verge", "url": "https://www.theverge.com/rss/index.xml"},
     {"name": "Wired", "url": "https://www.wired.com/feed/category/business/latest/rss"},
@@ -341,6 +341,20 @@ HTML_TEMPLATE = """
         .db-error { font-size: 13px; color: #c92a2a; background: #fff5f5; border: 1px solid #ffc9c9; border-radius: 8px; padding: 8px 15px; margin-bottom: 15px; }
         .empty-state { text-align: center; color: #888; padding: 60px 20px; font-size: 18px; }
 
+        .home-tab { border-bottom: 1px solid #2a3a50; margin-bottom: 5px; font-weight: 600; }
+        .home-screen { text-align: center; padding: 80px 20px 40px; }
+        .home-icon { font-size: 64px; margin-bottom: 20px; }
+        .home-title { font-size: 32px; color: #1a73e8; margin-bottom: 12px; font-weight: 700; }
+        .home-desc { font-size: 18px; color: #666; margin-bottom: 50px; }
+        .home-feeds { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; max-width: 800px; margin: 0 auto 40px; }
+        .home-feed-card {
+            padding: 14px 24px; background: #fff; border: 1px solid #e0e0e0; border-radius: 10px;
+            color: #333; text-decoration: none; font-size: 15px; font-weight: 500;
+            transition: all 0.2s; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+        }
+        .home-feed-card:hover { border-color: #1a73e8; color: #1a73e8; box-shadow: 0 3px 12px rgba(26,115,232,0.15); transform: translateY(-2px); }
+        .home-hint { font-size: 14px; color: #aaa; }
+
         @media (max-width: 900px) {
             .sidebar { width: 60px; min-width: 60px; }
             .sidebar-title { font-size: 12px; padding: 10px 5px 15px; }
@@ -357,6 +371,10 @@ HTML_TEMPLATE = """
     <!-- 왼쪽 사이드바: 뉴스 제공자 탭 -->
     <nav class="sidebar">
         <div class="sidebar-title">뉴스 제공자</div>
+        <a href="/"
+           class="feed-tab home-tab {% if active_feed is none %}active{% endif %}">
+            Home
+        </a>
         {% for feed in feeds %}
         <a href="/?feed={{ loop.index0 }}"
            class="feed-tab {% if active_feed == loop.index0 %}active{% endif %}"
@@ -372,12 +390,14 @@ HTML_TEMPLATE = """
         <div class="db-error">Supabase 오류: {{ db_error }}</div>
         {% endif %}
 
+        {% if active_feed is not none %}
         <div class="content-header">
-            <h1>{% if active_feed is not none %}{{ feeds[active_feed].name }}{% else %}뉴스 핵심 요약 서비스{% endif %}</h1>
+            <h1>{{ feeds[active_feed].name }}</h1>
             {% if articles %}
             <a href="/download-ppt" class="ppt-btn">PPT 다운로드 ({{ (articles|length + 1) // 2 + 1 }}장)</a>
             {% endif %}
         </div>
+        {% endif %}
 
         <div id="loading" class="loading-overlay">뉴스를 불러오는 중입니다...</div>
 
@@ -403,7 +423,20 @@ HTML_TEMPLATE = """
             </div>
             {% endfor %}
         {% elif active_feed is none %}
-            <div class="empty-state">왼쪽에서 뉴스 제공자를 선택하세요.</div>
+            <div class="home-screen">
+                <div class="home-icon">📰</div>
+                <h2 class="home-title">뉴스 핵심 요약 서비스</h2>
+                <p class="home-desc">AI가 뉴스 기사를 읽고 핵심만 요약해 드립니다</p>
+                <div class="home-feeds">
+                    {% for feed in feeds %}
+                    <a href="/?feed={{ loop.index0 }}" class="home-feed-card"
+                       onclick="document.getElementById('loading').style.display='block';">
+                        {{ feed.name }}
+                    </a>
+                    {% endfor %}
+                </div>
+                <p class="home-hint">왼쪽 메뉴 또는 위 카드를 클릭하여 시작하세요</p>
+            </div>
         {% endif %}
     </main>
 
