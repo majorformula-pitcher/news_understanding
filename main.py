@@ -355,6 +355,41 @@ HTML_TEMPLATE = """
         .home-feed-card:hover { border-color: #1a73e8; color: #1a73e8; box-shadow: 0 3px 12px rgba(26,115,232,0.15); transform: translateY(-2px); }
         .home-hint { font-size: 14px; color: #aaa; }
 
+        .daily-btn {
+            flex-shrink: 0;
+            padding: 6px 14px;
+            background-color: #27ae60;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+        .daily-btn:hover { background-color: #219a52; }
+        .daily-btn:disabled { background-color: #95a5a6; cursor: not-allowed; }
+        .daily-btn.selected { background-color: #95a5a6; }
+
+        .daily-item {
+            background: white; margin-bottom: 20px; padding: 20px 25px; border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.07); position: relative;
+        }
+        .daily-item h3 { color: #333; font-size: 18px; margin-bottom: 8px; padding-right: 80px; }
+        .daily-item h3 a { text-decoration: none; color: inherit; }
+        .daily-item .daily-summary { font-size: 15px; color: #2c3e50; line-height: 1.7; white-space: pre-wrap; }
+        .daily-item .daily-remove {
+            position: absolute; top: 15px; right: 15px;
+            background: #e74c3c; color: #fff; border: none; border-radius: 50%;
+            width: 28px; height: 28px; font-size: 16px; cursor: pointer; line-height: 28px; text-align: center;
+        }
+        .daily-item .daily-order {
+            display: inline-block; background: #1a73e8; color: #fff; border-radius: 50%;
+            width: 24px; height: 24px; text-align: center; line-height: 24px; font-size: 13px;
+            font-weight: bold; margin-right: 8px;
+        }
+
         @media (max-width: 900px) {
             .sidebar { width: 60px; min-width: 60px; }
             .sidebar-title { font-size: 12px; padding: 10px 5px 15px; }
@@ -393,9 +428,6 @@ HTML_TEMPLATE = """
         {% if active_feed is not none %}
         <div class="content-header">
             <h1>{{ feeds[active_feed].name }}</h1>
-            {% if articles %}
-            <a href="/download-ppt" class="ppt-btn">PPT 다운로드 ({{ (articles|length + 1) // 2 + 1 }}장)</a>
-            {% endif %}
         </div>
         {% endif %}
 
@@ -408,7 +440,10 @@ HTML_TEMPLATE = """
         {% if articles %}
             {% for article in articles %}
             <div class="result-item" id="article-{{ loop.index0 }}">
-                <h2><a href="{{ article.link }}" target="_blank">{{ article.title }}</a></h2>
+                <h2 style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                    <a href="{{ article.link }}" target="_blank" style="flex:1;">{{ article.title }}</a>
+                    <button class="daily-btn" onclick="selectForDaily({{ loop.index0 }})" id="daily-btn-{{ loop.index0 }}">Daily News 로 선택</button>
+                </h2>
                 <div class="article-layout">
                     <div class="article-body">{{ article.body }}</div>
                     <div class="summary-section" id="summary-{{ loop.index0 }}">
@@ -437,6 +472,17 @@ HTML_TEMPLATE = """
                 </div>
                 <p class="home-hint">왼쪽 메뉴 또는 위 카드를 클릭하여 시작하세요</p>
             </div>
+
+            <div id="daily-section" style="display:none; margin-top: 10px;">
+                <div class="content-header">
+                    <h1>Daily News 선택 목록</h1>
+                    <div style="display:flex;gap:10px;">
+                        <button class="ppt-btn" onclick="downloadDailyPPT()">PPT 다운로드</button>
+                        <button onclick="clearDaily()" style="padding:12px 24px;background:#e74c3c;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;">전체 삭제</button>
+                    </div>
+                </div>
+                <div id="daily-list"></div>
+            </div>
         {% endif %}
     </main>
 
@@ -446,6 +492,70 @@ HTML_TEMPLATE = """
         { title: {{ article.title | tojson }}, body: {{ article.body | tojson }}, link: {{ article.link | tojson }} },
         {% endfor %}
     ];
+
+    // Daily News localStorage 관리
+    function getDailyNews() {
+        try { return JSON.parse(localStorage.getItem('dailyNews') || '[]'); }
+        catch { return []; }
+    }
+    function saveDailyNews(list) {
+        localStorage.setItem('dailyNews', JSON.stringify(list));
+    }
+
+    // 페이지 로드 시 이미 선택된 기사 버튼 상태 업데이트
+    function updateDailyBtnStates() {
+        const daily = getDailyNews();
+        const dailyLinks = daily.map(d => d.link);
+        articles.forEach((a, idx) => {
+            const btn = document.getElementById('daily-btn-' + idx);
+            if (btn && dailyLinks.includes(a.link)) {
+                btn.textContent = '선택됨';
+                btn.disabled = true;
+                btn.classList.add('selected');
+            }
+        });
+    }
+
+    // Daily News 로 선택 버튼 클릭
+    async function selectForDaily(idx) {
+        const btn = document.getElementById('daily-btn-' + idx);
+        const article = articles[idx];
+
+        btn.disabled = true;
+        btn.textContent = '요약 중...';
+
+        // 요약도 같이 표시
+        const summaryDiv = document.getElementById('summary-' + idx);
+        const contentDiv = summaryDiv.querySelector('.summary-content');
+        summaryDiv.classList.add('visible');
+        contentDiv.textContent = 'AI가 요약하는 중입니다...';
+
+        try {
+            const res = await fetch('/api/summarize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(article)
+            });
+            const data = await res.json();
+            contentDiv.textContent = data.summary;
+
+            // localStorage에 저장
+            const daily = getDailyNews();
+            daily.push({ title: article.title, link: article.link, summary: data.summary });
+            saveDailyNews(daily);
+
+            btn.textContent = '선택됨';
+            btn.classList.add('selected');
+
+            // 요약하기 버튼도 완료 처리
+            const sumBtn = document.querySelectorAll('.summarize-btn')[idx];
+            if (sumBtn) { sumBtn.textContent = '요약 완료'; sumBtn.disabled = true; }
+        } catch (e) {
+            contentDiv.textContent = '요약 중 오류가 발생했습니다.';
+            btn.textContent = 'Daily News 로 선택';
+            btn.disabled = false;
+        }
+    }
 
     async function summarizeArticle(idx) {
         const btn = document.querySelectorAll('.summarize-btn')[idx];
@@ -472,6 +582,67 @@ HTML_TEMPLATE = """
             btn.disabled = false;
         }
     }
+
+    // Home 화면: 선택된 Daily News 목록 렌더링
+    function renderDailyList() {
+        const section = document.getElementById('daily-section');
+        const listDiv = document.getElementById('daily-list');
+        if (!section || !listDiv) return;
+
+        const daily = getDailyNews();
+        if (daily.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+        section.style.display = 'block';
+        listDiv.innerHTML = daily.map((item, i) =>
+            '<div class="daily-item">' +
+                '<button class="daily-remove" onclick="removeDaily(' + i + ')">×</button>' +
+                '<h3><span class="daily-order">' + (i + 1) + '</span><a href="' + item.link + '" target="_blank">' + item.title + '</a></h3>' +
+                '<div class="daily-summary">' + item.summary + '</div>' +
+            '</div>'
+        ).join('');
+    }
+
+    function removeDaily(idx) {
+        const daily = getDailyNews();
+        daily.splice(idx, 1);
+        saveDailyNews(daily);
+        renderDailyList();
+    }
+
+    function clearDaily() {
+        if (confirm('선택한 Daily News를 모두 삭제하시겠습니까?')) {
+            saveDailyNews([]);
+            renderDailyList();
+        }
+    }
+
+    async function downloadDailyPPT() {
+        const daily = getDailyNews();
+        if (daily.length === 0) { alert('선택된 뉴스가 없습니다.'); return; }
+        try {
+            const res = await fetch('/api/daily-ppt', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ articles: daily })
+            });
+            if (!res.ok) throw new Error('PPT 생성 실패');
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'daily_news.pptx';
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            alert('PPT 다운로드 중 오류가 발생했습니다.');
+        }
+    }
+
+    // 초기화
+    updateDailyBtnStates();
+    renderDailyList();
     </script>
 </body>
 </html>
@@ -566,16 +737,18 @@ async def api_summarize(request: Request):
     return JSONResponse({"summary": summary})
 
 
-@app.get("/download-ppt")
-def download_ppt():
-    articles = load_articles_from_db()
+@app.post("/api/daily-ppt")
+async def daily_ppt(request: Request):
+    """Daily News 선택 기사들로 PPT 생성"""
+    data = await request.json()
+    articles = data.get("articles", [])
     if not articles:
-        return HTMLResponse(content="<h3>다운로드할 기사가 없습니다.</h3>", status_code=404)
+        return JSONResponse({"error": "선택된 기사가 없습니다."}, status_code=400)
     output = generate_ppt(articles)
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        headers={"Content-Disposition": "attachment; filename=news_summary.pptx"},
+        headers={"Content-Disposition": "attachment; filename=daily_news.pptx"},
     )
 
 
