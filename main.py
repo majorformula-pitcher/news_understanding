@@ -370,10 +370,10 @@ async def parse_rss_and_fetch_news(rss_url):
                 rss_pub_date = pub_date_elem.text.strip() if pub_date_elem is not None and pub_date_elem.text else ""
                 items.append({'link': link_elem.text, 'rss_title': rss_title, 'rss_desc': rss_desc, 'rss_pub_date': rss_pub_date})
 
-        fetch_tasks = [get_news_content(it['link']) for it in items[:10]]
+        fetch_tasks = [get_news_content(it['link']) for it in items]
         fetched_results = await asyncio.gather(*fetch_tasks)
 
-        for (title, body, page_date), it in zip(fetched_results, items[:10]):
+        for (title, body, page_date), it in zip(fetched_results, items):
             # 페이지 접근 실패 시 RSS 데이터로 대체
             if title.startswith("오류 발생:") or not body or body == "본문을 찾을 수 없습니다.":
                 title = it['rss_title'] or title
