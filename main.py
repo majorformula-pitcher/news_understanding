@@ -30,11 +30,12 @@ RSS_FEEDS = [
     {"name": "OpenAI", "url": "https://openai.com/news/rss.xml"},
     {"name": "AI Jobs", "url": "https://aijobs.net/feed/"},
     {"name": "AI (arxiv)", "url": "http://export.arxiv.org/rss/cs.AI"},
+    {"name": "Techmeme", "url": "https://www.techmeme.com/feed.xml"},
     {"name": "Hugging Face", "url": "https://huggingface.co/blog/feed.xml"},
 ]
 
-# 활성화된 피드 인덱스 (로봇신문-AI, 로봇신문-로봇, 전자신문-AI, ZDNet Korea, Hugging Face)
-ACTIVE_FEED_INDICES = {0, 1, 2, 4, 11}
+# 활성화된 피드 인덱스 (로봇신문-AI, 로봇신문-로봇, 전자신문-AI, ZDNet Korea, Techmeme, Hugging Face)
+ACTIVE_FEED_INDICES = {0, 1, 2, 4, 11, 12}
 
 # Configure Claude API using environment variable
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
