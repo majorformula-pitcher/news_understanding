@@ -970,64 +970,61 @@ HTML_TEMPLATE = """
         }
     }
 
-    // Home 화면: 선택된 Daily News 목록 렌더링
-    async function renderDailyList() {
-        const listDiv = document.getElementById('daily-list');
-        const emptyDiv = document.getElementById('daily-empty');
-        const pptBtn = document.getElementById('daily-ppt-btn');
-        const clearBtn = document.getElementById('daily-clear-btn');
-        if (!listDiv) return;
-
-        const daily = getDailyNews();
-        if (daily.length === 0) {
-            if (pptBtn) pptBtn.style.display = 'none';
-            if (clearBtn) clearBtn.style.display = 'none';
-            listDiv.innerHTML = '';
-            // DB에 뉴스가 있는지 확인하여 안내 메시지 표시
-            try {
-                const res = await fetch('/api/news-stats');
-                const data = await res.json();
+    // Home 화면: DB 뉴스 통계 로드 (비동기, 실패해도 무방)
+    function loadNewsStats() {
+        var emptyDiv = document.getElementById('daily-empty');
+        if (!emptyDiv) return;
+        fetch('/api/news-stats')
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
                 if (data.total > 0) {
-                    const statLines = Object.entries(data.stats).map(
-                        ([pub, cnt]) => '<li>' + escapeHtml(pub) + ': <strong>' + cnt + '</strong>건</li>'
-                    ).join('');
-                    if (emptyDiv) emptyDiv.innerHTML =
+                    var statLines = '';
+                    for (var pub in data.stats) {
+                        statLines += '<li>' + escapeHtml(pub) + ': <strong>' + data.stats[pub] + '</strong>건</li>';
+                    }
+                    emptyDiv.innerHTML =
                         '<div class="home-icon">📰</div>' +
                         '<h2 class="home-title">DB에 총 ' + data.total + '건의 뉴스가 저장되어 있습니다</h2>' +
                         '<ul style="list-style:none;padding:0;margin:12px 0;font-size:15px;">' + statLines + '</ul>' +
                         '<p class="home-desc">왼쪽 메뉴에서 뉴스 제공자를 선택하여 기사를 확인하고<br>"Daily News 로 선택" 버튼을 눌러 기사를 추가하세요</p>';
-                    if (emptyDiv) emptyDiv.style.display = '';
                 } else {
-                    if (emptyDiv) {
-                        emptyDiv.innerHTML =
-                            '<div class="home-icon">📰</div>' +
-                            '<h2 class="home-title">Daily News가 비어 있습니다</h2>' +
-                            '<p class="home-desc">"뉴스 업데이트" 버튼을 눌러 뉴스를 수집한 후<br>왼쪽 메뉴에서 뉴스 제공자를 선택하세요</p>';
-                        emptyDiv.style.display = '';
-                    }
-                }
-            } catch (e) {
-                if (emptyDiv) {
                     emptyDiv.innerHTML =
                         '<div class="home-icon">📰</div>' +
                         '<h2 class="home-title">Daily News가 비어 있습니다</h2>' +
-                        '<p class="home-desc">왼쪽 메뉴에서 뉴스 제공자를 선택한 후<br>"Daily News 로 선택" 버튼을 눌러 기사를 추가하세요</p>';
-                    emptyDiv.style.display = '';
+                        '<p class="home-desc">"뉴스 업데이트" 버튼을 눌러 뉴스를 수집한 후<br>왼쪽 메뉴에서 뉴스 제공자를 선택하세요</p>';
                 }
-            }
+            })
+            .catch(function() {});
+    }
+
+    // Home 화면: 선택된 Daily News 목록 렌더링
+    function renderDailyList() {
+        var listDiv = document.getElementById('daily-list');
+        var emptyDiv = document.getElementById('daily-empty');
+        var pptBtn = document.getElementById('daily-ppt-btn');
+        var clearBtn = document.getElementById('daily-clear-btn');
+        if (!listDiv) return;
+
+        var daily = getDailyNews();
+        if (daily.length === 0) {
+            if (emptyDiv) emptyDiv.style.display = '';
+            if (pptBtn) pptBtn.style.display = 'none';
+            if (clearBtn) clearBtn.style.display = 'none';
+            listDiv.innerHTML = '';
+            loadNewsStats();
             return;
         }
         if (emptyDiv) emptyDiv.style.display = 'none';
         if (pptBtn) pptBtn.style.display = '';
         if (clearBtn) clearBtn.style.display = '';
-        listDiv.innerHTML = daily.map((item, i) =>
-            '<div class="daily-item">' +
+        listDiv.innerHTML = daily.map(function(item, i) {
+            return '<div class="daily-item">' +
                 '<button class="daily-remove" onclick="removeDaily(' + i + ')">×</button>' +
                 '<h3><span class="daily-order">' + (i + 1) + '</span><a href="' + escapeHtml(item.link) + '" target="_blank">' + escapeHtml(item.title) + '</a></h3>' +
                 (item.source ? '<span class="daily-source">' + escapeHtml(item.source) + '</span>' : '') +
                 '<div class="daily-summary">' + escapeHtml(item.summary) + '</div>' +
-            '</div>'
-        ).join('');
+            '</div>';
+        }).join('');
     }
 
     function removeDaily(idx) {
