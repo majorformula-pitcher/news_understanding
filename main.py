@@ -33,8 +33,8 @@ RSS_FEEDS = [
     {"name": "Hugging Face", "url": "https://huggingface.co/blog/feed.xml"},
 ]
 
-# 활성화된 피드 인덱스 (로봇신문-AI, 로봇신문-로봇, 전자신문-AI, Hugging Face)
-ACTIVE_FEED_INDICES = {0, 1, 2, 11}
+# 활성화된 피드 인덱스 (로봇신문-AI, 로봇신문-로봇, 전자신문-AI, ZDNet Korea, Hugging Face)
+ACTIVE_FEED_INDICES = {0, 1, 2, 4, 11}
 
 # Configure Claude API using environment variable
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
