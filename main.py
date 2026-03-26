@@ -119,6 +119,40 @@ def load_articles_by_publisher(publisher):
         print(supabase_error)
         return []
 
+
+def update_article_summary(url, summary):
+    """기사 URL로 summary 컬럼만 업데이트"""
+    if not supabase:
+        return False
+    try:
+        supabase.table("news-understanding").update(
+            {"summary": summary}
+        ).eq("url", url).execute()
+        return True
+    except Exception as e:
+        print(f"Summary 업데이트 오류: {e}")
+        return False
+
+
+def get_news_stats():
+    """DB에 저장된 뉴스 통계 조회 (제공자별 기사 수)"""
+    if not supabase:
+        return {}
+    try:
+        result = (
+            supabase.table("news-understanding")
+            .select("publisher")
+            .execute()
+        )
+        stats = {}
+        for row in result.data:
+            pub = row.get("publisher", "기타")
+            stats[pub] = stats.get(pub, 0) + 1
+        return stats
+    except Exception as e:
+        print(f"뉴스 통계 조회 오류: {e}")
+        return {}
+
 async def summarize_article(title, body):
     if not ANTHROPIC_API_KEY or not client:
         return "⚠️ API 키가 설정되지 않았습니다. Render.com 설정에서 ANTHROPIC_API_KEY를 추가해주세요."
@@ -738,11 +772,12 @@ HTML_TEMPLATE = """
     async function selectForDaily(idx) {
         const btn = document.getElementById('daily-btn-' + idx);
         const article = articles[idx];
-
-        // 이미 요약이 완료된 상태인지 확인
         const summaryDiv = document.getElementById('summary-' + idx);
         const contentDiv = summaryDiv.querySelector('.summary-content');
-        const existingSummary = summaryDiv.classList.contains('visible') ? contentDiv.textContent : null;
+
+        // DB에서 로드된 요약 또는 화면에 표시된 요약 확인
+        const existingSummary = (article.summary && article.summary.trim().length > 0) ? article.summary :
+            (summaryDiv.classList.contains('visible') ? contentDiv.textContent : null);
 
         if (existingSummary && existingSummary !== 'AI가 요약하는 중입니다...' && existingSummary !== '요약 중 오류가 발생했습니다.') {
             btn.disabled = true;
@@ -768,6 +803,8 @@ HTML_TEMPLATE = """
             });
             const data = await res.json();
             contentDiv.textContent = data.summary;
+            // 로컬 articles 배열도 업데이트
+            articles[idx].summary = data.summary;
 
             const daily = getDailyNews();
             daily.push({ title: article.title, link: article.link, summary: data.summary, source: currentFeedName });
@@ -816,7 +853,7 @@ HTML_TEMPLATE = """
     }
 
     // Home 화면: 선택된 Daily News 목록 렌더링
-    function renderDailyList() {
+    async function renderDailyList() {
         const listDiv = document.getElementById('daily-list');
         const emptyDiv = document.getElementById('daily-empty');
         const pptBtn = document.getElementById('daily-ppt-btn');
@@ -825,10 +862,41 @@ HTML_TEMPLATE = """
 
         const daily = getDailyNews();
         if (daily.length === 0) {
-            if (emptyDiv) emptyDiv.style.display = '';
             if (pptBtn) pptBtn.style.display = 'none';
             if (clearBtn) clearBtn.style.display = 'none';
             listDiv.innerHTML = '';
+            // DB에 뉴스가 있는지 확인하여 안내 메시지 표시
+            try {
+                const res = await fetch('/api/news-stats');
+                const data = await res.json();
+                if (data.total > 0) {
+                    const statLines = Object.entries(data.stats).map(
+                        ([pub, cnt]) => '<li>' + escapeHtml(pub) + ': <strong>' + cnt + '</strong>건</li>'
+                    ).join('');
+                    if (emptyDiv) emptyDiv.innerHTML =
+                        '<div class="home-icon">📰</div>' +
+                        '<h2 class="home-title">DB에 총 ' + data.total + '건의 뉴스가 저장되어 있습니다</h2>' +
+                        '<ul style="list-style:none;padding:0;margin:12px 0;font-size:15px;">' + statLines + '</ul>' +
+                        '<p class="home-desc">왼쪽 메뉴에서 뉴스 제공자를 선택하여 기사를 확인하고<br>"Daily News 로 선택" 버튼을 눌러 기사를 추가하세요</p>';
+                    if (emptyDiv) emptyDiv.style.display = '';
+                } else {
+                    if (emptyDiv) {
+                        emptyDiv.innerHTML =
+                            '<div class="home-icon">📰</div>' +
+                            '<h2 class="home-title">Daily News가 비어 있습니다</h2>' +
+                            '<p class="home-desc">"뉴스 업데이트" 버튼을 눌러 뉴스를 수집한 후<br>왼쪽 메뉴에서 뉴스 제공자를 선택하세요</p>';
+                        emptyDiv.style.display = '';
+                    }
+                }
+            } catch (e) {
+                if (emptyDiv) {
+                    emptyDiv.innerHTML =
+                        '<div class="home-icon">📰</div>' +
+                        '<h2 class="home-title">Daily News가 비어 있습니다</h2>' +
+                        '<p class="home-desc">왼쪽 메뉴에서 뉴스 제공자를 선택한 후<br>"Daily News 로 선택" 버튼을 눌러 기사를 추가하세요</p>';
+                    emptyDiv.style.display = '';
+                }
+            }
             return;
         }
         if (emptyDiv) emptyDiv.style.display = 'none';
@@ -1041,10 +1109,21 @@ async def api_summarize(request: Request):
     link = data.get("link", "")
     publisher = data.get("publisher", "")
     summary = await summarize_article(title, body)
-    # DB에도 저장
+    # DB의 summary 컬럼만 업데이트
     if summary and link:
-        save_articles_to_db([{"title": title, "body": body, "link": link, "summary": summary}], publisher=publisher)
+        updated = update_article_summary(link, summary)
+        if not updated:
+            # fallback: 전체 upsert
+            save_articles_to_db([{"title": title, "body": body, "link": link, "summary": summary}], publisher=publisher)
     return JSONResponse({"summary": summary})
+
+
+@app.get("/api/news-stats")
+async def api_news_stats():
+    """DB에 저장된 뉴스 통계 조회"""
+    stats = get_news_stats()
+    total = sum(stats.values())
+    return JSONResponse({"stats": stats, "total": total})
 
 
 @app.post("/api/fetch-urls")
