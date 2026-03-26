@@ -742,7 +742,7 @@ HTML_TEMPLATE = """
     async function fetchCustomUrls() {
         const textarea = document.getElementById('custom-urls');
         const btn = document.getElementById('custom-fetch-btn');
-        const urls = textarea.value.trim().split('\n').map(u => u.trim()).filter(u => u.length > 0);
+        const urls = textarea.value.trim().split(String.fromCharCode(10)).map(u => u.trim()).filter(u => u.length > 0);
 
         if (urls.length === 0) {
             alert('URL을 입력해주세요.');
