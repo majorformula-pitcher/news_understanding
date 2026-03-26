@@ -369,14 +369,33 @@ async def parse_rss_and_fetch_news(rss_url):
                 rss_desc = desc_elem.text.strip() if desc_elem is not None and desc_elem.text else ""
                 pub_date_elem = item.find('pubDate')
                 rss_pub_date = pub_date_elem.text.strip() if pub_date_elem is not None and pub_date_elem.text else ""
-                items.append({'link': link_elem.text, 'rss_title': rss_title, 'rss_desc': rss_desc, 'rss_pub_date': rss_pub_date})
+                # Techmeme 등 aggregator: description에서 원본 기사 URL 추출
+                original_url = None
+                if rss_desc and 'techmeme.com' in (link_elem.text or ''):
+                    from bs4 import BeautifulSoup as _BS
+                    desc_soup = _BS(rss_desc, 'html.parser')
+                    # 본문 큰 링크(SPAN > B > A)에서 원본 URL 추출
+                    span = desc_soup.find('span')
+                    if span:
+                        a_tag = span.find('a', href=True)
+                        if a_tag and 'techmeme.com' not in a_tag['href']:
+                            original_url = a_tag['href']
+                    # description에서 텍스트만 추출하여 요약으로 사용
+                    rss_desc = desc_soup.get_text(separator=' ', strip=True)
+                items.append({
+                    'link': original_url or link_elem.text,
+                    'rss_title': rss_title,
+                    'rss_desc': rss_desc,
+                    'rss_pub_date': rss_pub_date,
+                    'original_url': original_url,
+                })
 
-        fetch_tasks = [get_news_content(it['link']) for it in items]
+        fetch_tasks = [get_news_content(it['link']) for it in items[:10]]
         fetched_results = await asyncio.gather(*fetch_tasks)
 
-        for (title, body, page_date), it in zip(fetched_results, items):
+        for (title, body, page_date), it in zip(fetched_results, items[:10]):
             # 페이지 접근 실패 시 RSS 데이터로 대체
-            if title.startswith("오류 발생:") or not body or body == "본문을 찾을 수 없습니다.":
+            if title.startswith("오류 발생:") or not body or body == "본문을 찾을 수 없습니다." or body.startswith("[추출 실패]") or body.startswith("[페이월"):
                 title = it['rss_title'] or title
                 body = it['rss_desc'] or body
             # RSS pubDate 우선, 없으면 페이지에서 추출한 날짜 사용
