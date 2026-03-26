@@ -601,9 +601,9 @@ HTML_TEMPLATE = """
         {% endif %}
         {% endfor %}
         <a href="javascript:void(0)"
-           class="feed-tab disabled-tab"
-           style="color:#555;cursor:not-allowed;opacity:0.5;"
-           title="준비 중">
+           class="feed-tab"
+           onclick="showCustomInput()"
+           data-feed-idx="custom">
             직접 입력
         </a>
     </nav>
@@ -630,6 +630,21 @@ HTML_TEMPLATE = """
 
         <!-- 피드 기사 목록 (JS로 렌더링) -->
         <div id="feed-articles"></div>
+
+        <!-- 직접 입력 섹션 -->
+        <div id="custom-section" style="display:none;">
+            <div class="content-header">
+                <h1>직접 입력</h1>
+            </div>
+            <div style="padding:20px 0;">
+                <p style="color:#888;font-size:14px;margin-bottom:12px;">뉴스 URL을 한 줄에 하나씩 입력하세요 (최대 20개)</p>
+                <textarea id="custom-urls" rows="6" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box;" placeholder="https://example.com/news/article1&#10;https://example.com/news/article2"></textarea>
+                <div style="margin-top:12px;display:flex;gap:10px;">
+                    <button class="summarize-btn" onclick="fetchCustomUrls()" id="custom-fetch-btn" style="padding:12px 24px;font-size:15px;">기사 가져오기</button>
+                </div>
+            </div>
+            <div id="custom-articles"></div>
+        </div>
 
         <!-- Home / Daily News -->
         <div id="home-section">
@@ -691,6 +706,7 @@ HTML_TEMPLATE = """
         document.getElementById('feed-header').style.display = 'none';
         document.getElementById('feed-articles').innerHTML = '';
         document.getElementById('home-section').style.display = 'none';
+        document.getElementById('custom-section').style.display = 'none';
         document.getElementById('loading').style.display = 'none';
 
         if (section === 'home') {
@@ -699,6 +715,8 @@ HTML_TEMPLATE = """
             document.getElementById('collect-status').style.display = '';
         } else if (section === 'feed') {
             document.getElementById('feed-header').style.display = '';
+        } else if (section === 'custom') {
+            document.getElementById('custom-section').style.display = '';
         }
     }
 
@@ -711,6 +729,106 @@ HTML_TEMPLATE = """
             const tab = document.querySelector('.feed-tab[data-feed-idx="' + feedIdx + '"]');
             if (tab) tab.classList.add('active');
         }
+    }
+
+    // 직접 입력 탭 클릭
+    function showCustomInput() {
+        setActiveTab('custom');
+        currentFeedName = '직접 입력';
+        showSection('custom');
+    }
+
+    // 직접 입력: URL에서 기사 가져오기
+    async function fetchCustomUrls() {
+        const textarea = document.getElementById('custom-urls');
+        const btn = document.getElementById('custom-fetch-btn');
+        const urls = textarea.value.trim().split('\n').map(u => u.trim()).filter(u => u.length > 0);
+
+        if (urls.length === 0) {
+            alert('URL을 입력해주세요.');
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = '가져오는 중...';
+        document.getElementById('custom-articles').innerHTML = '<div class="loading-overlay" style="display:block;">기사를 가져오는 중입니다...</div>';
+
+        try {
+            const res = await fetch('/api/fetch-urls', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ urls: urls })
+            });
+            const data = await res.json();
+            articles = (data.articles || []).map(a => ({
+                title: a.title,
+                body: a.body,
+                link: a.link,
+                summary: '',
+                pub_date: a.pub_date || '',
+                publisher: '직접 입력',
+                error: a.error,
+                paywall: a.paywall
+            }));
+            // DB에 저장
+            if (articles.length > 0) {
+                const validArticles = articles.filter(a => !a.error);
+                if (validArticles.length > 0) {
+                    await fetch('/api/save-custom-articles', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ articles: validArticles, publisher: '직접 입력' })
+                    });
+                }
+            }
+            renderCustomArticles();
+        } catch (e) {
+            document.getElementById('custom-articles').innerHTML = '<div class="error-msg">기사를 가져오는 중 오류가 발생했습니다.</div>';
+        }
+        btn.disabled = false;
+        btn.textContent = '기사 가져오기';
+    }
+
+    // 직접 입력 기사 렌더링 (피드 기사와 동일한 형태)
+    function renderCustomArticles() {
+        const container = document.getElementById('custom-articles');
+        if (articles.length === 0) {
+            container.innerHTML = '<div class="empty-state">가져온 기사가 없습니다.</div>';
+            return;
+        }
+
+        const daily = getDailyNews();
+        const dailyLinks = daily.map(d => d.link);
+
+        container.innerHTML = articles.map((a, i) => {
+            if (a.error) {
+                return '<div class="result-item" style="opacity:0.6;">' +
+                    '<h2><a href="' + escapeHtml(a.link) + '" target="_blank">' + escapeHtml(a.link) + '</a></h2>' +
+                    '<p style="color:#e74c3c;">' + escapeHtml(a.body) + '</p>' +
+                '</div>';
+            }
+            const isSelected = dailyLinks.includes(a.link);
+            const hasSummary = a.summary && a.summary.trim().length > 0;
+            const dateFormatted = formatPubDate(a.pub_date);
+            return '<div class="result-item" id="article-' + i + '">' +
+                '<h2 style="display:flex;align-items:center;justify-content:space-between;gap:12px;">' +
+                    '<a href="' + escapeHtml(a.link) + '" target="_blank" style="flex:1;">' + escapeHtml(a.title) + '</a>' +
+                    (dateFormatted ? '<span class="article-date">' + dateFormatted + '</span>' : '') +
+                    '<button class="daily-btn' + (isSelected ? ' selected' : '') + '" onclick="selectForDaily(' + i + ')" id="daily-btn-' + i + '"' + (isSelected ? ' disabled' : '') + '>' + (isSelected ? '선택됨' : 'Daily News 로 선택') + '</button>' +
+                '</h2>' +
+                '<div class="article-layout">' +
+                    '<div class="article-body">' + escapeHtml(a.body) + '</div>' +
+                    '<div class="summary-section' + (hasSummary ? ' visible' : '') + '" id="summary-' + i + '">' +
+                        '<h3>요약</h3>' +
+                        '<div class="summary-content">' + (hasSummary ? escapeHtml(a.summary) : '') + '</div>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="btn-row">' +
+                    '<a href="' + escapeHtml(a.link) + '" target="_blank" class="original-btn">원문 보기</a>' +
+                    '<button class="summarize-btn" onclick="summarizeArticle(' + i + ')"' + (hasSummary ? ' disabled' : '') + '>' + (hasSummary ? '요약 완료' : '요약하기') + '</button>' +
+                '</div>' +
+            '</div>';
+        }).join('');
     }
 
     // DB에서 기사 로드 후 렌더링
@@ -1139,6 +1257,16 @@ async def api_fetch_urls(request: Request):
         is_paywall = body.startswith("[페이월/접근 제한]")
         articles.append({"title": title, "body": body, "link": url, "error": is_error, "paywall": is_paywall, "pub_date": pub_date})
     return JSONResponse({"articles": articles})
+
+
+@app.post("/api/save-custom-articles")
+async def api_save_custom_articles(request: Request):
+    """직접 입력 기사를 DB에 저장"""
+    data = await request.json()
+    articles = data.get("articles", [])
+    publisher = data.get("publisher", "직접 입력")
+    save_articles_to_db(articles, publisher=publisher)
+    return JSONResponse({"saved": len(articles)})
 
 
 @app.post("/api/daily-ppt")
