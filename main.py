@@ -602,6 +602,7 @@ HTML_TEMPLATE = """
             <div class="content-header">
                 <h1>Daily News</h1>
                 <div style="display:flex;gap:10px;">
+                    <button class="summarize-btn" onclick="collectNews()" id="collect-btn" style="padding:12px 24px;font-size:15px;">뉴스 업데이트</button>
                     <button class="ppt-btn" onclick="downloadDailyPPT()" id="daily-ppt-btn" style="display:none;">PPT 다운로드</button>
                     <button onclick="clearDaily()" id="daily-clear-btn" style="display:none;padding:12px 24px;background:#e74c3c;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;">전체 삭제</button>
                 </div>
@@ -633,7 +634,7 @@ HTML_TEMPLATE = """
     // 현재 로드된 기사 배열 (피드별로 갱신됨)
     let articles = [];
     let currentFeedName = '';
-    let newsCollected = false;
+    let newsCollected = true;
 
     // 이스케이프 함수
     function escapeHtml(str) {
@@ -680,11 +681,6 @@ HTML_TEMPLATE = """
 
     // DB에서 기사 로드 후 렌더링
     async function loadFeedFromDB(feedIdx, feedName) {
-        if (!newsCollected) {
-            alert('뉴스 정보 수집이 아직 완료되지 않았습니다.');
-            return;
-        }
-
         setActiveTab(feedIdx);
         currentFeedName = feedName;
         showSection('feed');
@@ -884,8 +880,12 @@ HTML_TEMPLATE = """
         }
     }
 
-    // 초기 뉴스 수집
+    // 뉴스 업데이트 버튼 클릭
     async function collectNews() {
+        const btn = document.getElementById('collect-btn');
+        btn.disabled = true;
+        btn.textContent = '수집 중...';
+
         showSection('collect');
         document.getElementById('collect-status-text').textContent = '뉴스 정보를 수집 중입니다...';
         document.getElementById('collect-status-sub').textContent = '잠시만 기다려주세요';
@@ -899,7 +899,6 @@ HTML_TEMPLATE = """
             if (data.errors && data.errors.length > 0) {
                 document.getElementById('collect-status-sub').textContent += ' (일부 오류: ' + data.errors.join(', ') + ')';
             }
-            // 3초 후 홈으로 전환
             setTimeout(() => {
                 showSection('home');
                 renderDailyList();
@@ -908,6 +907,8 @@ HTML_TEMPLATE = """
             document.getElementById('collect-status-text').textContent = '뉴스 수집 중 오류가 발생했습니다';
             document.getElementById('collect-status-sub').textContent = '페이지를 새로고침해 주세요.';
         }
+        btn.disabled = false;
+        btn.textContent = '뉴스 업데이트';
     }
 
     // Home 탭 클릭
@@ -918,8 +919,9 @@ HTML_TEMPLATE = """
         renderDailyList();
     });
 
-    // 초기화: 뉴스 수집 시작
-    collectNews();
+    // 초기화: 홈 화면 표시
+    showSection('home');
+    renderDailyList();
     </script>
 </body>
 </html>
