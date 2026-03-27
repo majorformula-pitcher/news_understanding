@@ -682,13 +682,6 @@ HTML_TEMPLATE = """
         <div class="db-error">Supabase 오류: {{ db_error }}</div>
         {% endif %}
 
-        <!-- 뉴스 수집 상태 메시지 -->
-        <div id="collect-status" style="text-align:center;padding:60px 20px;display:none;">
-            <div id="collect-spinner" class="collect-spinner"></div>
-            <h2 id="collect-status-text" style="color:#1a73e8;font-size:22px;margin-bottom:10px;">뉴스 정보를 수집 중입니다...</h2>
-            <p id="collect-status-sub" style="color:#888;font-size:15px;white-space:pre-wrap;text-align:center;max-width:800px;margin:0 auto;">잠시만 기다려주세요</p>
-        </div>
-
         <!-- 피드 콘텐츠 헤더 -->
         <div class="content-header" id="feed-header" style="display:none;">
             <h1 id="feed-header-title"></h1>
@@ -716,6 +709,12 @@ HTML_TEMPLATE = """
 
         <!-- Home / Daily News -->
         <div id="home-section">
+            <!-- 뉴스 수집 상태 메시지 -->
+            <div id="collect-status" style="text-align:center;padding:40px 20px;display:none;background:#f0f4ff;border-radius:12px;margin-bottom:20px;">
+                <div id="collect-spinner" class="collect-spinner"></div>
+                <h2 id="collect-status-text" style="color:#1a73e8;font-size:22px;margin-bottom:10px;">뉴스 정보를 수집 중입니다...</h2>
+                <p id="collect-status-sub" style="color:#888;font-size:15px;white-space:pre-wrap;text-align:center;max-width:800px;margin:0 auto;">잠시만 기다려주세요</p>
+            </div>
             <div class="content-header">
                 <h1>Daily News</h1>
                 <div style="display:flex;gap:10px;">
@@ -770,23 +769,25 @@ HTML_TEMPLATE = """
     }
 
     // 섹션 표시 관리
+    var isCollecting = false;
+
     function showSection(section) {
-        document.getElementById('collect-status').style.display = 'none';
         document.getElementById('feed-header').style.display = 'none';
         document.getElementById('feed-articles').innerHTML = '';
         document.getElementById('home-section').style.display = 'none';
         document.getElementById('custom-section').style.display = 'none';
         document.getElementById('loading').style.display = 'none';
 
-        if (section === 'home') {
+        if (section === 'home' || section === 'collect') {
             document.getElementById('home-section').style.display = '';
-        } else if (section === 'collect') {
-            document.getElementById('collect-status').style.display = '';
         } else if (section === 'feed') {
             document.getElementById('feed-header').style.display = '';
         } else if (section === 'custom') {
             document.getElementById('custom-section').style.display = '';
         }
+
+        // collect-status는 isCollecting 상태에 따라 표시
+        document.getElementById('collect-status').style.display = isCollecting ? '' : 'none';
     }
 
     // 사이드바 active 상태 업데이트
@@ -1221,6 +1222,7 @@ HTML_TEMPLATE = """
         const btn = document.getElementById('collect-btn');
         btn.disabled = true;
         btn.textContent = '수집 중...';
+        isCollecting = true;
 
         showSection('collect');
         var spinner = document.getElementById('collect-spinner');
@@ -1271,10 +1273,12 @@ HTML_TEMPLATE = """
             }
             var delay = (finalData && finalData.errors && finalData.errors.length > 0) ? 6000 : 3000;
             setTimeout(() => {
-                showSection('home');
+                isCollecting = false;
+                document.getElementById('collect-status').style.display = 'none';
                 renderDailyList();
             }, delay);
         } catch (e) {
+            isCollecting = false;
             spinner.className = 'collect-spinner done';
             statusText.textContent = '뉴스 수집 중 오류가 발생했습니다';
             statusSub.textContent = e.message || '알 수 없는 오류';
