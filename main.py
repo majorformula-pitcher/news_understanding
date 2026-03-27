@@ -419,8 +419,14 @@ async def parse_rss_and_fetch_news(rss_url):
                     'original_url': original_url,
                 })
 
-        fetch_tasks = [get_news_content(it['link']) for it in items]
-        fetched_results = await asyncio.gather(*fetch_tasks)
+        # 동시 요청 수 제한 (5개씩 배치 처리)
+        fetched_results = []
+        batch_size = 5
+        for b in range(0, len(items), batch_size):
+            batch = items[b:b+batch_size]
+            batch_tasks = [get_news_content(it['link']) for it in batch]
+            batch_results = await asyncio.gather(*batch_tasks)
+            fetched_results.extend(batch_results)
 
         for (title, body, page_date), it in zip(fetched_results, items):
             # 페이지 접근 실패 시 RSS 데이터로 대체
@@ -1219,36 +1225,59 @@ HTML_TEMPLATE = """
         showSection('collect');
         var spinner = document.getElementById('collect-spinner');
         spinner.className = 'collect-spinner';
-        document.getElementById('collect-status-text').textContent = '뉴스 정보를 수집 중입니다...';
-        document.getElementById('collect-status-sub').textContent = '잠시만 기다려주세요';
+        var statusText = document.getElementById('collect-status-text');
+        var statusSub = document.getElementById('collect-status-sub');
+        statusText.textContent = '뉴스 정보를 수집 중입니다...';
+        statusSub.style.textAlign = 'center';
+        statusSub.textContent = '잠시만 기다려주세요';
 
         try {
-            const res = await fetch('/api/collect-news', { method: 'POST' });
-            var resText = await res.text();
-            if (!res.ok) {
-                var errDetail = '';
-                try { var errData = JSON.parse(resText); errDetail = errData.detail || resText; } catch(x) { errDetail = resText; }
-                throw new Error('서버 응답 오류 (HTTP ' + res.status + '): ' + errDetail);
+            const res = await fetch('/api/collect-news-stream');
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            var buffer = '';
+            var finalData = null;
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                var lines = buffer.split('\\n');
+                buffer = lines.pop();
+                for (var line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+                    try {
+                        var evt = JSON.parse(line.substring(6));
+                        if (evt.type === 'progress') {
+                            statusSub.textContent = '뉴스 ' + evt.analyzed + '개를 분석했습니다. 뉴스 ' + evt.collected + '개를 DB에 저장했습니다.\\n현재: ' + evt.feed;
+                        } else if (evt.type === 'error') {
+                            statusSub.textContent += '\\n⚠ ' + evt.feed + ': 오류 발생';
+                        } else if (evt.type === 'done') {
+                            finalData = evt;
+                        }
+                    } catch(x) {}
+                }
             }
-            const data = JSON.parse(resText);
+
             newsCollected = true;
             spinner.className = 'collect-spinner done';
-            document.getElementById('collect-status-text').textContent = '뉴스 정보 수집이 완료됐습니다';
-            document.getElementById('collect-status-sub').textContent = '총 ' + data.collected + '건의 뉴스가 수집되었습니다. 왼쪽 메뉴에서 뉴스 제공자를 선택하세요.';
-            if (data.errors && data.errors.length > 0) {
-                var subEl = document.getElementById('collect-status-sub');
-                subEl.textContent += '\\n\\n⚠ 일부 피드 오류:\\n' + data.errors.join('\\n');
-                subEl.style.textAlign = 'left';
+            if (finalData) {
+                statusText.textContent = '뉴스 정보 수집이 완료됐습니다';
+                statusSub.textContent = '뉴스 ' + finalData.analyzed + '개를 분석하고, ' + finalData.collected + '개를 DB에 저장했습니다.\\n왼쪽 메뉴에서 뉴스 제공자를 선택하세요.';
+                if (finalData.errors && finalData.errors.length > 0) {
+                    statusSub.textContent += '\\n\\n⚠ 일부 피드 오류:\\n' + finalData.errors.join('\\n');
+                    statusSub.style.textAlign = 'left';
+                }
             }
-            var delay = (data.errors && data.errors.length > 0) ? 6000 : 3000;
+            var delay = (finalData && finalData.errors && finalData.errors.length > 0) ? 6000 : 3000;
             setTimeout(() => {
                 showSection('home');
                 renderDailyList();
             }, delay);
         } catch (e) {
             spinner.className = 'collect-spinner done';
-            document.getElementById('collect-status-text').textContent = '뉴스 수집 중 오류가 발생했습니다';
-            document.getElementById('collect-status-sub').textContent = e.message || '알 수 없는 오류';
+            statusText.textContent = '뉴스 수집 중 오류가 발생했습니다';
+            statusSub.textContent = e.message || '알 수 없는 오류';
         }
         btn.disabled = false;
         btn.textContent = '뉴스 업데이트';
@@ -1348,25 +1377,33 @@ def generate_ppt(articles):
     return output
 
 
-@app.post("/api/collect-news")
-async def api_collect_news():
-    """활성화된 RSS 피드에서 뉴스를 수집하여 DB에 저장"""
-    collected = 0
-    errors = []
-    for idx in ACTIVE_FEED_INDICES:
-        feed = RSS_FEEDS[idx]
-        try:
-            articles = await parse_rss_and_fetch_news(feed["url"])
-            if articles:
-                save_articles_to_db(articles, publisher=feed["name"])
-                collected += len(articles)
-        except Exception as e:
-            errors.append(f"{feed['name']}: {e}")
-    return JSONResponse({
-        "status": "completed",
-        "collected": collected,
-        "errors": errors,
-    })
+@app.get("/api/collect-news-stream")
+async def api_collect_news_stream():
+    """SSE로 실시간 진행률을 전송하며 뉴스 수집"""
+    import json as _json
+
+    async def event_stream():
+        collected = 0
+        analyzed = 0
+        errors = []
+        feed_list = [RSS_FEEDS[idx] for idx in sorted(ACTIVE_FEED_INDICES)]
+
+        for feed in feed_list:
+            try:
+                articles = await parse_rss_and_fetch_news(feed["url"])
+                analyzed += len(articles)
+                yield f"data: {_json.dumps({'type': 'progress', 'analyzed': analyzed, 'collected': collected, 'feed': feed['name']})}\n\n"
+                if articles:
+                    save_articles_to_db(articles, publisher=feed["name"])
+                    collected += len(articles)
+                    yield f"data: {_json.dumps({'type': 'progress', 'analyzed': analyzed, 'collected': collected, 'feed': feed['name']})}\n\n"
+            except Exception as e:
+                errors.append(f"{feed['name']}: {e}")
+                yield f"data: {_json.dumps({'type': 'error', 'feed': feed['name'], 'message': str(e)})}\n\n"
+
+        yield f"data: {_json.dumps({'type': 'done', 'analyzed': analyzed, 'collected': collected, 'errors': errors})}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @app.get("/api/articles")
