@@ -645,7 +645,7 @@ HTML_TEMPLATE = """
         <div id="collect-status" style="text-align:center;padding:60px 20px;display:none;">
             <div style="font-size:48px;margin-bottom:20px;">📡</div>
             <h2 id="collect-status-text" style="color:#1a73e8;font-size:22px;margin-bottom:10px;">뉴스 정보를 수집 중입니다...</h2>
-            <p id="collect-status-sub" style="color:#888;font-size:15px;">잠시만 기다려주세요</p>
+            <p id="collect-status-sub" style="color:#888;font-size:15px;white-space:pre-wrap;text-align:left;max-width:800px;margin:0 auto;">잠시만 기다려주세요</p>
         </div>
 
         <!-- 피드 콘텐츠 헤더 -->
@@ -1169,20 +1169,26 @@ HTML_TEMPLATE = """
 
         try {
             const res = await fetch('/api/collect-news', { method: 'POST' });
+            if (!res.ok) {
+                var errText = '';
+                try { var errData = await res.json(); errText = errData.detail || JSON.stringify(errData); } catch(x) { errText = await res.text(); }
+                throw new Error('서버 응답 오류 (HTTP ' + res.status + '): ' + errText);
+            }
             const data = await res.json();
             newsCollected = true;
             document.getElementById('collect-status-text').textContent = '뉴스 정보 수집이 완료됐습니다';
             document.getElementById('collect-status-sub').textContent = '총 ' + data.collected + '건의 뉴스가 수집되었습니다. 왼쪽 메뉴에서 뉴스 제공자를 선택하세요.';
             if (data.errors && data.errors.length > 0) {
-                document.getElementById('collect-status-sub').textContent += ' (일부 오류: ' + data.errors.join(', ') + ')';
+                document.getElementById('collect-status-sub').textContent += '\\n\\n⚠ 일부 피드 오류:\\n' + data.errors.join('\\n');
             }
+            var delay = (data.errors && data.errors.length > 0) ? 6000 : 3000;
             setTimeout(() => {
                 showSection('home');
                 renderDailyList();
-            }, 3000);
+            }, delay);
         } catch (e) {
             document.getElementById('collect-status-text').textContent = '뉴스 수집 중 오류가 발생했습니다';
-            document.getElementById('collect-status-sub').textContent = '페이지를 새로고침해 주세요.';
+            document.getElementById('collect-status-sub').textContent = e.message || '알 수 없는 오류';
         }
         btn.disabled = false;
         btn.textContent = '뉴스 업데이트';
