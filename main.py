@@ -23,7 +23,7 @@ RSS_FEEDS = [
     {"name": "로봇신문-로봇", "url": "https://www.irobotnews.com/rss/S1N1.xml"},
     {"name": "전자신문-AI", "url": "http://rss.etnews.com/04046.xml"},
     {"name": "The AI", "url": "https://www.newstheai.com/rss/allArticle.xml"},
-    {"name": "디지털투데이", "url": "https://news.google.com/rss/search?q=site:digitaltoday.co.kr&hl=ko&gl=KR&ceid=KR:ko"},
+    {"name": "디지털투데이", "url": "https://www.digitaltoday.co.kr/rss/allArticle.xml"},
     {"name": "ZDNet Korea", "url": "https://zdnet.co.kr/feed"},
     {"name": "TechCrunch", "url": "https://techcrunch.com/category/artificial-intelligence/feed/"},
     {"name": "The Verge", "url": "https://www.theverge.com/rss/index.xml"},
@@ -271,7 +271,7 @@ async def get_news_content(url):
             'div.article_txt', 'div.article_body', 'div#articleBody',
             'div#article-view-content-div', 'div.news_cnt_detail_wrap',
             # 국제 뉴스 사이트
-            '[itemprop="articleBody"]', 'div.article-body', 'div.article__body',
+            'div.wp-block-post-content', '[itemprop="articleBody"]', 'div.article-body', 'div.article__body',
             'div.story-body', 'div.article-content', 'div.post-content',
             'div.body-content', 'section.article-body',
             'div[data-component="text-block"]',
@@ -383,12 +383,6 @@ async def parse_rss_and_fetch_news(rss_url):
                             original_url = a_tag['href']
                     # description에서 텍스트만 추출하여 요약으로 사용
                     rss_desc = desc_soup.get_text(separator=' ', strip=True)
-                # Google News: 리다이렉트 URL에서 원본 URL 추출
-                if 'news.google.com' in (link_elem.text or ''):
-                    original_url = link_elem.text  # 나중에 리다이렉트로 원본 URL 확인
-                    # 제목에서 " - 출처" 부분 제거
-                    if ' - ' in rss_title:
-                        rss_title = rss_title.rsplit(' - ', 1)[0].strip()
                 items.append({
                     'link': original_url or link_elem.text,
                     'rss_title': rss_title,
@@ -396,20 +390,6 @@ async def parse_rss_and_fetch_news(rss_url):
                     'rss_pub_date': rss_pub_date,
                     'original_url': original_url,
                 })
-
-        # Google News 리다이렉트 URL → 원본 URL 변환
-        async def resolve_google_news_url(url):
-            if 'news.google.com' not in url:
-                return url
-            try:
-                async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as rc:
-                    r = await rc.get(url, headers=headers)
-                    return str(r.url)
-            except Exception:
-                return url
-
-        for it in items[:10]:
-            it['link'] = await resolve_google_news_url(it['link'])
 
         fetch_tasks = [get_news_content(it['link']) for it in items[:10]]
         fetched_results = await asyncio.gather(*fetch_tasks)
