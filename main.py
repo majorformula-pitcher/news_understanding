@@ -36,8 +36,8 @@ RSS_FEEDS = [
     {"name": "Hugging Face", "url": "https://huggingface.co/blog/feed.xml"},
 ]
 
-# 활성화된 피드 인덱스 (로봇신문-AI, 로봇신문-로봇, 전자신문-AI, The AI, 디지털투데이, ZDNet Korea, TechCrunch, OpenAI, Techmeme, Hugging Face)
-ACTIVE_FEED_INDICES = {0, 1, 2, 3, 4, 5, 6, 9, 12, 13}
+# 활성화된 피드 인덱스 (로봇신문-AI, 로봇신문-로봇, 전자신문-AI, The AI, 디지털투데이, ZDNet Korea, TechCrunch, Techmeme, Hugging Face)
+ACTIVE_FEED_INDICES = {0, 1, 2, 3, 4, 5, 6, 12, 13}
 
 # Configure Claude API using environment variable
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
@@ -722,6 +722,7 @@ HTML_TEMPLATE = """
                     <button class="ppt-btn" onclick="downloadDailyPPT()" id="daily-ppt-btn" style="display:none;">PPT 다운로드</button>
                     <button onclick="clearDaily()" id="daily-clear-btn" style="display:none;padding:12px 24px;background:#e74c3c;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;">전체 삭제</button>
                     <button onclick="exportExcel()" style="padding:12px 24px;background:#217346;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;">DB 엑셀 Export</button>
+                    <button onclick="resetDatabase()" style="padding:12px 24px;background:#95a5a6;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;">DB 초기화</button>
                 </div>
             </div>
             <div id="daily-empty" class="home-screen" style="padding-top:40px;">
@@ -1195,6 +1196,22 @@ HTML_TEMPLATE = """
         }
     }
 
+    async function resetDatabase() {
+        if (!confirm('전체 뉴스 DB가 삭제됩니다. 계속하시겠습니까?')) return;
+        try {
+            const res = await fetch('/api/reset-db', { method: 'POST' });
+            const data = await res.json();
+            if (res.ok) {
+                alert('DB가 초기화되었습니다. 총 ' + data.deleted + '건 삭제됨.');
+                loadNewsStats();
+            } else {
+                alert('DB 초기화 오류: ' + (data.error || '알 수 없는 오류'));
+            }
+        } catch (e) {
+            alert('DB 초기화 중 오류가 발생했습니다: ' + e.message);
+        }
+    }
+
     async function downloadDailyPPT() {
         const daily = getDailyNews();
         if (daily.length === 0) { alert('선택된 뉴스가 없습니다.'); return; }
@@ -1483,6 +1500,20 @@ async def daily_ppt(request: Request):
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
         headers={"Content-Disposition": "attachment; filename=daily_news.pptx"},
     )
+
+
+@app.post("/api/reset-db")
+async def api_reset_db():
+    """DB 전체 기사 삭제"""
+    if not supabase:
+        return JSONResponse({"error": "DB 연결이 없습니다."}, status_code=500)
+    try:
+        # 전체 행 삭제 (neq 조건으로 모든 행 매칭)
+        result = supabase.table("news-understanding").delete().neq("id", -1).execute()
+        deleted = len(result.data) if result.data else 0
+        return JSONResponse({"status": "ok", "deleted": deleted})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 @app.get("/api/export-excel")
