@@ -164,11 +164,11 @@ async def summarize_article(title, body):
     prompt = f"""다음 뉴스 기사를 읽고 아래 형식에 정확히 맞춰 요약해 주세요.
 
 형식:
-[기사 제목 1줄]
 . 핵심 요약 첫 번째 줄 (2줄 이내)
 . 핵심 요약 두 번째 줄 (2줄 이내)
 
 주의사항:
+- 기사 제목을 포함하지 마세요. 요약 내용만 작성하세요.
 - 반드시 '.'으로 시작하는 2개의 문장으로 요약하세요.
 - 불필요한 설명 없이 핵심만 전달하세요.
 - 마크다운 문법(**, ##, *, # 등)을 절대 사용하지 마세요. 순수 텍스트로만 작성하세요.
@@ -1053,11 +1053,17 @@ HTML_TEMPLATE = """
         if (pptBtn) pptBtn.style.display = '';
         if (clearBtn) clearBtn.style.display = '';
         listDiv.innerHTML = daily.map(function(item, i) {
+            // 요약에서 제목 줄 제거 (. 으로 시작하는 줄만 남김)
+            var summaryLines = (item.summary || '').split('\\n').filter(function(line) {
+                var trimmed = line.trim();
+                return trimmed.startsWith('.');
+            });
+            var cleanSummary = summaryLines.length > 0 ? summaryLines.join('\\n') : item.summary;
             return '<div class="daily-item">' +
                 '<button class="daily-remove" onclick="removeDaily(' + i + ')">×</button>' +
                 '<h3><span class="daily-order">' + (i + 1) + '</span><a href="' + escapeHtml(item.link) + '" target="_blank">' + escapeHtml(item.title) + '</a></h3>' +
                 (item.source ? '<span class="daily-source">' + escapeHtml(item.source) + '</span>' : '') +
-                '<div class="daily-summary">' + escapeHtml(item.summary) + '</div>' +
+                '<div class="daily-summary">' + escapeHtml(cleanSummary) + '</div>' +
             '</div>';
         }).join('');
     }
@@ -1195,21 +1201,21 @@ def generate_ppt(articles):
             tf_content = content_box.text_frame
             tf_content.word_wrap = True
 
-            # 제목 (파란 글씨 + 밑줄)
+            # 제목 (진한 파란 글씨 + 밑줄)
             p_title = tf_content.paragraphs[0]
             p_title.text = article["title"]
             p_title.font.size = Pt(18)
             p_title.font.bold = True
-            p_title.font.color.rgb = RGBColor(26, 115, 232)
+            p_title.font.color.rgb = RGBColor(0, 51, 153)
             p_title.font.underline = True
             p_title.space_after = Pt(12)
 
-            # 요약 내용을 줄별로 추가 (검은색 글씨, 불릿)
+            # 요약 내용을 줄별로 추가 (제목 줄 제거, . 으로 시작하는 줄만)
             summary_text = article.get("summary") or "요약 없음"
-            for line in summary_text.split('\n'):
-                line = line.strip()
-                if not line:
-                    continue
+            summary_lines = [l.strip() for l in summary_text.split('\n') if l.strip().startswith('.')]
+            if not summary_lines:
+                summary_lines = [l.strip() for l in summary_text.split('\n') if l.strip()]
+            for line in summary_lines:
                 p_sum = tf_content.add_paragraph()
                 p_sum.text = line
                 p_sum.font.size = Pt(13)
