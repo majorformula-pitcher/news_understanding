@@ -20,24 +20,26 @@ app = FastAPI()
 
 # RSS 피드 목록
 RSS_FEEDS = [
-    {"name": "로봇신문-AI", "url": "https://www.irobotnews.com/rss/S1N2.xml"},
-    {"name": "로봇신문-로봇", "url": "https://www.irobotnews.com/rss/S1N1.xml"},
-    {"name": "전자신문-AI", "url": "http://rss.etnews.com/04046.xml"},
-    {"name": "The AI", "url": "https://www.newstheai.com/rss/allArticle.xml"},
-    {"name": "디지털투데이", "url": "https://www.digitaltoday.co.kr/rss/allArticle.xml"},
-    {"name": "ZDNet Korea", "url": "https://zdnet.co.kr/feed"},
-    {"name": "TechCrunch", "url": "https://techcrunch.com/category/artificial-intelligence/feed/"},
-    {"name": "The Verge", "url": "https://www.theverge.com/rss/index.xml"},
-    {"name": "Wired", "url": "https://www.wired.com/feed/category/business/latest/rss"},
-    {"name": "OpenAI", "url": "https://openai.com/news/rss.xml"},
-    {"name": "AI Jobs", "url": "https://aijobs.net/feed/"},
-    {"name": "AI (arxiv)", "url": "http://export.arxiv.org/rss/cs.AI"},
-    {"name": "Techmeme", "url": "https://www.techmeme.com/feed.xml"},
-    {"name": "Hugging Face", "url": "https://huggingface.co/blog/feed.xml"},
+    {"name": "로봇신문-AI", "url": "https://www.irobotnews.com/rss/S1N2.xml"},       # 0
+    {"name": "로봇신문-로봇", "url": "https://www.irobotnews.com/rss/S1N1.xml"},      # 1
+    {"name": "전자신문-AI", "url": "http://rss.etnews.com/04046.xml"},                 # 2
+    {"name": "전자신문-전자", "url": "http://rss.etnews.com/06061.xml"},               # 3
+    {"name": "The AI", "url": "https://www.newstheai.com/rss/allArticle.xml"},         # 4
+    {"name": "디지털투데이", "url": "https://www.digitaltoday.co.kr/rss/allArticle.xml"}, # 5
+    {"name": "한국경제-IT", "url": "https://www.hankyung.com/feed/it"},                # 6
+    {"name": "ZDNet Korea", "url": "https://zdnet.co.kr/feed"},                        # 7
+    {"name": "TechCrunch", "url": "https://techcrunch.com/category/artificial-intelligence/feed/"}, # 8
+    {"name": "The Verge", "url": "https://www.theverge.com/rss/index.xml"},            # 9
+    {"name": "Wired", "url": "https://www.wired.com/feed/category/business/latest/rss"}, # 10
+    {"name": "OpenAI", "url": "https://openai.com/news/rss.xml"},                      # 11
+    {"name": "AI Jobs", "url": "https://aijobs.net/feed/"},                            # 12
+    {"name": "AI (arxiv)", "url": "http://export.arxiv.org/rss/cs.AI"},                # 13
+    {"name": "Techmeme", "url": "https://www.techmeme.com/feed.xml"},                  # 14
+    {"name": "Hugging Face", "url": "https://huggingface.co/blog/feed.xml"},           # 15
 ]
 
-# 활성화된 피드 인덱스 (로봇신문-AI, 로봇신문-로봇, 전자신문-AI, The AI, 디지털투데이, ZDNet Korea, TechCrunch, Techmeme, Hugging Face)
-ACTIVE_FEED_INDICES = {0, 1, 2, 3, 4, 5, 6, 12, 13}
+# 활성화된 피드 인덱스
+ACTIVE_FEED_INDICES = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 14, 15}
 
 # Configure Claude API using environment variable
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
@@ -348,6 +350,7 @@ async def get_news_content(url):
                 return title or "추출 실패", error_reason, pub_date
 
         # 텍스트 정제
+        body = re.sub(r'Back to Articles\s*', '', body)
         body = re.sub(r'(?:이메일|email|e-mail)\s*[:\s]*\s*[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', '', body, flags=re.IGNORECASE)
         body = re.sub(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', '', body)
         body = re.sub(r'[가-힣]{2,4}\s*기자(?!\w)', '', body)
@@ -419,7 +422,8 @@ async def parse_rss_and_fetch_news(rss_url):
                     'original_url': original_url,
                 })
 
-        # 동시 요청 수 제한 (5개씩 배치 처리)
+        # 최대 10개로 제한, 동시 요청 수 제한 (5개씩 배치 처리)
+        items = items[:10]
         fetched_results = []
         batch_size = 5
         for b in range(0, len(items), batch_size):
