@@ -568,7 +568,8 @@ HTML_TEMPLATE = """
         }
         .daily-item:active { cursor: grabbing; }
         .daily-item.dragging { opacity: 0.4; transform: scale(0.98); }
-        .daily-item.drag-over { border-top: 3px solid #1a73e8; margin-top: -3px; }
+        .daily-item.drag-over-top { border-top: 3px solid #1a73e8; margin-top: -3px; }
+        .daily-item.drag-over-bottom { border-bottom: 3px solid #1a73e8; margin-bottom: -3px; }
         .daily-item h3 { color: #333; font-size: 18px; margin-bottom: 8px; padding-right: 80px; }
         .daily-item h3 a { text-decoration: none; color: inherit; }
         .daily-item .daily-summary { font-size: 15px; color: #2c3e50; line-height: 1.7; white-space: pre-wrap; }
@@ -1074,6 +1075,7 @@ HTML_TEMPLATE = """
         // 드래그 앤 드롭 이벤트 바인딩
         var items = listDiv.querySelectorAll('.daily-item');
         var dragSrcIndex = null;
+
         items.forEach(function(item) {
             item.addEventListener('dragstart', function(e) {
                 dragSrcIndex = parseInt(this.dataset.index);
@@ -1082,22 +1084,35 @@ HTML_TEMPLATE = """
             });
             item.addEventListener('dragend', function() {
                 this.classList.remove('dragging');
-                items.forEach(function(el) { el.classList.remove('drag-over'); });
+                listDiv.querySelectorAll('.daily-item').forEach(function(el) {
+                    el.classList.remove('drag-over-top', 'drag-over-bottom');
+                });
             });
             item.addEventListener('dragover', function(e) {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'move';
-                this.classList.add('drag-over');
+                var rect = this.getBoundingClientRect();
+                var midY = rect.top + rect.height / 2;
+                this.classList.remove('drag-over-top', 'drag-over-bottom');
+                if (e.clientY < midY) {
+                    this.classList.add('drag-over-top');
+                } else {
+                    this.classList.add('drag-over-bottom');
+                }
             });
             item.addEventListener('dragleave', function() {
-                this.classList.remove('drag-over');
+                this.classList.remove('drag-over-top', 'drag-over-bottom');
             });
             item.addEventListener('drop', function(e) {
                 e.preventDefault();
-                var dropIndex = parseInt(this.dataset.index);
-                if (dragSrcIndex === null || dragSrcIndex === dropIndex) return;
+                var targetIndex = parseInt(this.dataset.index);
+                if (dragSrcIndex === null || dragSrcIndex === targetIndex) return;
+                var rect = this.getBoundingClientRect();
+                var midY = rect.top + rect.height / 2;
+                var dropIndex = e.clientY < midY ? targetIndex : targetIndex + 1;
                 var daily = getDailyNews();
                 var moved = daily.splice(dragSrcIndex, 1)[0];
+                if (dropIndex > dragSrcIndex) dropIndex--;
                 daily.splice(dropIndex, 0, moved);
                 saveDailyNews(daily);
                 renderDailyList();
