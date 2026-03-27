@@ -318,14 +318,19 @@ async def get_news_content(url):
                 # script, style, nav, footer, aside 태그 제거
                 for tag in el.find_all(['script', 'style', 'nav', 'footer', 'aside', 'iframe', 'header']):
                     tag.decompose()
-                # Hugging Face: h2 이전의 메타 정보(제목, 작성자, 날짜 등) 모두 제거
-                first_h2 = el.find('h2')
-                if first_h2 and 'blog-content' in ' '.join(el.get('class', [])):
-                    for sibling in list(first_h2.previous_siblings):
-                        if hasattr(sibling, 'decompose'):
-                            sibling.decompose()
-                        elif hasattr(sibling, 'extract'):
-                            sibling.extract()
+                # Hugging Face: 메타 정보만 선택적 제거 (제목, 작성자, 날짜, 카테고리)
+                if 'blog-content' in ' '.join(el.get('class', [])):
+                    for tag in el.find_all('div', class_='not-prose'):
+                        tag.decompose()
+                    for tag in el.find_all('div', class_='mb-4'):
+                        tag.decompose()
+                    h1 = el.find('h1')
+                    if h1:
+                        # h1 바로 다음 div (날짜/카테고리 정보) 제거
+                        next_div = h1.find_next_sibling('div')
+                        if next_div and len(next_div.get_text(strip=True)) < 100:
+                            next_div.decompose()
+                        h1.decompose()
                 if len(el.get_text(strip=True)) > 100:
                     body_element = el
                     break
@@ -728,9 +733,9 @@ HTML_TEMPLATE = """
                 <h2 id="collect-status-text" style="color:#1a73e8;font-size:22px;margin-bottom:10px;">뉴스 정보를 수집 중입니다...</h2>
                 <p id="collect-status-sub" style="color:#888;font-size:15px;white-space:pre-wrap;text-align:center;max-width:800px;margin:0 auto;">잠시만 기다려주세요</p>
             </div>
-            <div style="text-align:center;margin-bottom:25px;">
-                <h1 style="color:#1a73e8;font-size:24px;margin-bottom:15px;">Daily News</h1>
-                <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+            <div class="content-header">
+                <h1>Daily News</h1>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;">
                     <button class="summarize-btn" onclick="collectNews()" id="collect-btn" style="padding:12px 24px;font-size:15px;">뉴스 업데이트</button>
                     <button class="ppt-btn" onclick="downloadDailyPPT()" id="daily-ppt-btn" style="display:none;">PPT 다운로드</button>
                     <button onclick="clearDaily()" id="daily-clear-btn" style="display:none;padding:12px 24px;background:#e74c3c;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;">전체 삭제</button>
