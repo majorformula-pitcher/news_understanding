@@ -733,8 +733,8 @@ HTML_TEMPLATE = """
                 <h2 id="collect-status-text" style="color:#1a73e8;font-size:22px;margin-bottom:10px;">뉴스 정보를 수집 중입니다...</h2>
                 <p id="collect-status-sub" style="color:#888;font-size:15px;white-space:pre-wrap;text-align:center;max-width:800px;margin:0 auto;">잠시만 기다려주세요</p>
             </div>
-            <div class="content-header">
-                <h1>Daily News</h1>
+            <h1 style="color:#1a73e8;font-size:24px;text-align:center;margin-bottom:15px;">Daily News</h1>
+            <div class="content-header" style="justify-content:flex-end;">
                 <div style="display:flex;gap:10px;flex-wrap:wrap;">
                     <button class="summarize-btn" onclick="collectNews()" id="collect-btn" style="padding:12px 24px;font-size:15px;">뉴스 업데이트</button>
                     <button class="ppt-btn" onclick="downloadDailyPPT()" id="daily-ppt-btn" style="display:none;">PPT 다운로드</button>
