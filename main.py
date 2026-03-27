@@ -391,10 +391,10 @@ async def parse_rss_and_fetch_news(rss_url):
                     'original_url': original_url,
                 })
 
-        fetch_tasks = [get_news_content(it['link']) for it in items[:10]]
+        fetch_tasks = [get_news_content(it['link']) for it in items]
         fetched_results = await asyncio.gather(*fetch_tasks)
 
-        for (title, body, page_date), it in zip(fetched_results, items[:10]):
+        for (title, body, page_date), it in zip(fetched_results, items):
             # 페이지 접근 실패 시 RSS 데이터로 대체
             if title.startswith("오류 발생:") or not body or body == "본문을 찾을 수 없습니다." or body.startswith("[추출 실패]") or body.startswith("[페이월"):
                 title = it['rss_title'] or title
@@ -527,6 +527,13 @@ HTML_TEMPLATE = """
         .error-detail { color: #c92a2a; font-size: 14px; padding: 12px 16px; background: #fff0f0; border-radius: 6px; border: 1px solid #ffc9c9; white-space: pre-wrap; line-height: 1.6; }
         .paywall-notice { color: #e67700; font-size: 13px; padding: 8px 12px; background: #fff9e6; border-radius: 6px; border: 1px solid #ffe066; margin-bottom: 8px; }
         .loading-overlay { display: none; text-align: center; color: #1a73e8; font-weight: bold; font-size: 18px; padding: 40px 0; }
+        .collect-spinner {
+            width: 48px; height: 48px; margin: 0 auto 20px;
+            border: 5px solid #e8f0fe; border-top: 5px solid #1a73e8;
+            border-radius: 50%; animation: spin 1s linear infinite;
+        }
+        .collect-spinner.done { animation: none; border-color: #27ae60; border-top-color: #27ae60; }
+        @keyframes spin { to { transform: rotate(360deg); } }
         .db-error { font-size: 13px; color: #c92a2a; background: #fff5f5; border: 1px solid #ffc9c9; border-radius: 8px; padding: 8px 15px; margin-bottom: 15px; }
         .empty-state { text-align: center; color: #888; padding: 60px 20px; font-size: 18px; }
 
@@ -643,7 +650,7 @@ HTML_TEMPLATE = """
 
         <!-- 뉴스 수집 상태 메시지 -->
         <div id="collect-status" style="text-align:center;padding:60px 20px;display:none;">
-            <div style="font-size:48px;margin-bottom:20px;">📡</div>
+            <div id="collect-spinner" class="collect-spinner"></div>
             <h2 id="collect-status-text" style="color:#1a73e8;font-size:22px;margin-bottom:10px;">뉴스 정보를 수집 중입니다...</h2>
             <p id="collect-status-sub" style="color:#888;font-size:15px;white-space:pre-wrap;text-align:left;max-width:800px;margin:0 auto;">잠시만 기다려주세요</p>
         </div>
@@ -1164,6 +1171,8 @@ HTML_TEMPLATE = """
         btn.textContent = '수집 중...';
 
         showSection('collect');
+        var spinner = document.getElementById('collect-spinner');
+        spinner.className = 'collect-spinner';
         document.getElementById('collect-status-text').textContent = '뉴스 정보를 수집 중입니다...';
         document.getElementById('collect-status-sub').textContent = '잠시만 기다려주세요';
 
@@ -1176,6 +1185,7 @@ HTML_TEMPLATE = """
             }
             const data = await res.json();
             newsCollected = true;
+            spinner.className = 'collect-spinner done';
             document.getElementById('collect-status-text').textContent = '뉴스 정보 수집이 완료됐습니다';
             document.getElementById('collect-status-sub').textContent = '총 ' + data.collected + '건의 뉴스가 수집되었습니다. 왼쪽 메뉴에서 뉴스 제공자를 선택하세요.';
             if (data.errors && data.errors.length > 0) {
@@ -1187,6 +1197,7 @@ HTML_TEMPLATE = """
                 renderDailyList();
             }, delay);
         } catch (e) {
+            spinner.className = 'collect-spinner done';
             document.getElementById('collect-status-text').textContent = '뉴스 수집 중 오류가 발생했습니다';
             document.getElementById('collect-status-sub').textContent = e.message || '알 수 없는 오류';
         }
