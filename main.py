@@ -733,7 +733,7 @@ HTML_TEMPLATE = """
                 <h2 id="collect-status-text" style="color:#1a73e8;font-size:22px;margin-bottom:10px;">뉴스 정보를 수집 중입니다...</h2>
                 <p id="collect-status-sub" style="color:#888;font-size:15px;white-space:pre-wrap;text-align:center;max-width:800px;margin:0 auto;">잠시만 기다려주세요</p>
             </div>
-            <h1 style="color:#1a73e8;font-size:24px;text-align:center;margin-bottom:15px;">Daily News</h1>
+            <h1 style="color:#1a73e8;font-size:32px;text-align:center;margin-bottom:15px;">Daily News</h1>
             <div class="content-header" style="justify-content:flex-end;">
                 <div style="display:flex;gap:10px;flex-wrap:wrap;">
                     <button class="summarize-btn" onclick="collectNews()" id="collect-btn" style="padding:12px 24px;font-size:15px;">뉴스 업데이트</button>
@@ -1538,22 +1538,39 @@ async def api_reset_db():
         count_result = supabase.table("news-understanding").select("id", count="exact").execute()
         deleted = count_result.count or 0
 
-        # TRUNCATE TABLE로 데이터 삭제 + ID 시퀀스 초기화
-        async with httpx.AsyncClient() as hc:
-            resp = await hc.post(
-                f"{SUPABASE_URL}/rest/v1/rpc/truncate_news",
-                headers={
-                    "apikey": SUPABASE_KEY,
-                    "Authorization": f"Bearer {SUPABASE_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={},
-            )
-            if resp.status_code >= 400:
-                # RPC 함수가 없으면 delete fallback
-                supabase.table("news-understanding").delete().neq("id", -1).execute()
+        # 데이터 삭제
+        supabase.table("news-understanding").delete().neq("id", -1).execute()
 
-        return JSONResponse({"status": "ok", "deleted": deleted})
+        # ID 시퀀스 초기화 (여러 방법 시도)
+        reset_done = False
+
+        # 방법 1: RPC 함수 호출
+        try:
+            supabase.rpc("truncate_news").execute()
+            reset_done = True
+        except Exception:
+            pass
+
+        # 방법 2: Supabase SQL API 직접 호출
+        if not reset_done:
+            try:
+                async with httpx.AsyncClient() as hc:
+                    # service_role key로 SQL 실행
+                    resp = await hc.post(
+                        f"{SUPABASE_URL}/rest/v1/rpc/exec_sql",
+                        headers={
+                            "apikey": SUPABASE_KEY,
+                            "Authorization": f"Bearer {SUPABASE_KEY}",
+                            "Content-Type": "application/json",
+                        },
+                        json={"query": 'ALTER SEQUENCE "news-understanding_id_seq" RESTART WITH 1'},
+                    )
+                    if resp.status_code < 400:
+                        reset_done = True
+            except Exception:
+                pass
+
+        return JSONResponse({"status": "ok", "deleted": deleted, "id_reset": reset_done})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
