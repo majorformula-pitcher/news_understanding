@@ -39,7 +39,7 @@ RSS_FEEDS = [
 ]
 
 # 활성화된 피드 인덱스
-ACTIVE_FEED_INDICES = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 14, 15}
+ACTIVE_FEED_INDICES = {0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 14, 15}
 
 # Configure Claude API using environment variable
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
@@ -317,6 +317,11 @@ async def get_news_content(url):
             if el:
                 # script, style, nav, footer, aside 태그 제거
                 for tag in el.find_all(['script', 'style', 'nav', 'footer', 'aside', 'iframe', 'header']):
+                    tag.decompose()
+                # Hugging Face: 메타 정보(작성자, 날짜, 카테고리 등) 제거
+                for tag in el.find_all('div', class_='not-prose'):
+                    tag.decompose()
+                for tag in el.find_all('div', class_='mb-4'):
                     tag.decompose()
                 if len(el.get_text(strip=True)) > 100:
                     body_element = el
@@ -729,6 +734,7 @@ HTML_TEMPLATE = """
                     <button onclick="resetDatabase()" style="padding:12px 24px;background:#95a5a6;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;">DB 초기화</button>
                 </div>
             </div>
+            <div id="last-update-time" style="display:none;padding:8px 0;font-size:13px;color:#888;"></div>
             <div id="daily-empty" class="home-screen" style="padding-top:40px;">
                 <div class="home-icon">📰</div>
                 <h2 class="home-title">Daily News가 비어 있습니다</h2>
@@ -1245,6 +1251,13 @@ HTML_TEMPLATE = """
         btn.textContent = '수집 중...';
         isCollecting = true;
 
+        // 업데이트 시작 시간 표시
+        var now = new Date();
+        var timeStr = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0') + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
+        var updateTimeEl = document.getElementById('last-update-time');
+        updateTimeEl.textContent = '마지막 뉴스 업데이트: ' + timeStr;
+        updateTimeEl.style.display = '';
+
         showSection('collect');
         var spinner = document.getElementById('collect-spinner');
         spinner.className = 'collect-spinner';
@@ -1508,13 +1521,18 @@ async def daily_ppt(request: Request):
 
 @app.post("/api/reset-db")
 async def api_reset_db():
-    """DB 전체 기사 삭제"""
+    """DB 전체 기사 삭제 및 ID 초기화"""
     if not supabase:
         return JSONResponse({"error": "DB 연결이 없습니다."}, status_code=500)
     try:
-        # 전체 행 삭제 (neq 조건으로 모든 행 매칭)
+        # 전체 행 삭제
         result = supabase.table("news-understanding").delete().neq("id", -1).execute()
         deleted = len(result.data) if result.data else 0
+        # ID 시퀀스 초기화 (Supabase SQL function 필요: reset_news_sequence)
+        try:
+            supabase.rpc("reset_news_sequence").execute()
+        except Exception:
+            pass  # 함수가 없으면 ID 리셋 생략
         return JSONResponse({"status": "ok", "deleted": deleted})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
