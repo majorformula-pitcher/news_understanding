@@ -1546,16 +1546,21 @@ async def api_reset_db():
         count_result = supabase.table("news-understanding").select("id", count="exact").execute()
         deleted = count_result.count or 0
 
-        # TRUNCATE TABLE 실행 (RPC 함수 truncate_news 필요)
-        id_reset = False
-        try:
-            supabase.rpc("truncate_news").execute()
-            id_reset = True
-        except Exception:
-            # RPC 함수가 없으면 DELETE fallback (ID 리셋 안 됨)
-            supabase.table("news-understanding").delete().neq("id", -1).execute()
+        # TRUNCATE TABLE + RESTART IDENTITY 직접 실행
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{SUPABASE_URL}/rest/v1/rpc/truncate_news",
+                headers={
+                    "apikey": SUPABASE_KEY,
+                    "Authorization": f"Bearer {SUPABASE_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={},
+            )
+            if resp.status_code >= 400:
+                raise Exception(f"TRUNCATE 실패 (HTTP {resp.status_code}): {resp.text}")
 
-        return JSONResponse({"status": "ok", "deleted": deleted, "id_reset": id_reset})
+        return JSONResponse({"status": "ok", "deleted": deleted, "id_reset": True})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
