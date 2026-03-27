@@ -558,7 +558,8 @@ HTML_TEMPLATE = """
         }
         .daily-btn:hover { background-color: #219a52; }
         .daily-btn:disabled { background-color: #95a5a6; cursor: not-allowed; }
-        .daily-btn.selected { background-color: #95a5a6; }
+        .daily-btn.selected { background-color: #95a5a6; cursor: pointer; }
+        .daily-btn.selected:hover { background-color: #7f8c8d; }
 
         .daily-item {
             background: white; margin-bottom: 20px; padding: 20px 25px; border-radius: 12px;
@@ -834,7 +835,7 @@ HTML_TEMPLATE = """
                 '<h2 style="display:flex;align-items:center;justify-content:space-between;gap:12px;">' +
                     '<a href="' + escapeHtml(a.link) + '" target="_blank" style="flex:1;">' + escapeHtml(a.title) + '</a>' +
                     (dateFormatted ? '<span class="article-date">' + dateFormatted + '</span>' : '') +
-                    '<button class="daily-btn' + (isSelected ? ' selected' : '') + '" onclick="selectForDaily(' + i + ')" id="daily-btn-' + i + '"' + (isSelected ? ' disabled' : '') + '>' + (isSelected ? '선택됨' : 'Daily News 로 선택') + '</button>' +
+                    '<button class="daily-btn' + (isSelected ? ' selected' : '') + '" onclick="selectForDaily(' + i + ')" id="daily-btn-' + i + '">' + (isSelected ? '선택됨' : 'Daily News 로 선택') + '</button>' +
                 '</h2>' +
                 '<div class="article-layout">' +
                     '<div class="article-body">' + escapeHtml(a.body) + '</div>' +
@@ -889,7 +890,7 @@ HTML_TEMPLATE = """
                 '<h2 style="display:flex;align-items:center;justify-content:space-between;gap:12px;">' +
                     '<a href="' + escapeHtml(a.link) + '" target="_blank" style="flex:1;">' + escapeHtml(a.title) + '</a>' +
                     (dateFormatted ? '<span class="article-date">' + dateFormatted + '</span>' : '') +
-                    '<button class="daily-btn' + (isSelected ? ' selected' : '') + '" onclick="selectForDaily(' + i + ')" id="daily-btn-' + i + '"' + (isSelected ? ' disabled' : '') + '>' + (isSelected ? '선택됨' : 'Daily News 로 선택') + '</button>' +
+                    '<button class="daily-btn' + (isSelected ? ' selected' : '') + '" onclick="selectForDaily(' + i + ')" id="daily-btn-' + i + '">' + (isSelected ? '선택됨' : 'Daily News 로 선택') + '</button>' +
                 '</h2>' +
                 '<div class="article-layout">' +
                     '<div class="article-body">' + escapeHtml(a.body) + '</div>' +
@@ -906,24 +907,36 @@ HTML_TEMPLATE = """
         }).join('');
     }
 
-    // Daily News 로 선택 버튼 클릭
+    // Daily News 로 선택 버튼 클릭 (토글)
     async function selectForDaily(idx) {
         const btn = document.getElementById('daily-btn-' + idx);
         const article = articles[idx];
         const summaryDiv = document.getElementById('summary-' + idx);
         const contentDiv = summaryDiv.querySelector('.summary-content');
 
+        // 이미 선택된 경우 → 선택 해제 (요약 내용은 DB와 화면에 유지)
+        const daily = getDailyNews();
+        const dailyIdx = daily.findIndex(d => d.link === article.link);
+        if (dailyIdx !== -1) {
+            daily.splice(dailyIdx, 1);
+            saveDailyNews(daily);
+            btn.textContent = 'Daily News 로 선택';
+            btn.classList.remove('selected');
+            btn.disabled = false;
+            renderDailyList();
+            return;
+        }
+
         // DB에서 로드된 요약 또는 화면에 표시된 요약 확인
         const existingSummary = (article.summary && article.summary.trim().length > 0) ? article.summary :
             (summaryDiv.classList.contains('visible') ? contentDiv.textContent : null);
 
         if (existingSummary && existingSummary !== 'AI가 요약하는 중입니다...' && existingSummary !== '요약 중 오류가 발생했습니다.') {
-            btn.disabled = true;
-            const daily = getDailyNews();
             daily.push({ title: article.title, link: article.link, summary: existingSummary, source: currentFeedName });
             saveDailyNews(daily);
             btn.textContent = '선택됨';
             btn.classList.add('selected');
+            renderDailyList();
             return;
         }
 
@@ -944,12 +957,14 @@ HTML_TEMPLATE = """
             // 로컬 articles 배열도 업데이트
             articles[idx].summary = data.summary;
 
-            const daily = getDailyNews();
-            daily.push({ title: article.title, link: article.link, summary: data.summary, source: currentFeedName });
-            saveDailyNews(daily);
+            const daily2 = getDailyNews();
+            daily2.push({ title: article.title, link: article.link, summary: data.summary, source: currentFeedName });
+            saveDailyNews(daily2);
 
             btn.textContent = '선택됨';
             btn.classList.add('selected');
+            btn.disabled = false;
+            renderDailyList();
 
             const sumBtn = document.getElementById('article-' + idx).querySelector('.summarize-btn');
             if (sumBtn) { sumBtn.textContent = '요약 완료'; sumBtn.disabled = true; }
@@ -1138,6 +1153,10 @@ def generate_ppt(articles):
 
     # 타이틀 슬라이드
     slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank
+    background = slide.background
+    fill = background.fill
+    fill.solid()
+    fill.fore_color.rgb = RGBColor(220, 220, 220)
     txBox = slide.shapes.add_textbox(Inches(0.5), Inches(2.5), Inches(12.3), Inches(2))
     tf = txBox.text_frame
     tf.word_wrap = True
@@ -1154,44 +1173,47 @@ def generate_ppt(articles):
     p2.font.color.rgb = RGBColor(100, 100, 100)
     p2.alignment = PP_ALIGN.CENTER
 
-    # 기사 2개씩 슬라이드에 배치
+    # 기사 2개씩 슬라이드에 배치 (위/아래 세로 배치, 가로로 넓게)
     for i in range(0, len(articles), 2):
         slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank
+
+        # 슬라이드 배경을 회색으로 설정
+        background = slide.background
+        fill = background.fill
+        fill.solid()
+        fill.fore_color.rgb = RGBColor(220, 220, 220)
+
         pair = articles[i:i+2]
 
         for j, article in enumerate(pair):
-            left = Inches(0.5) if j == 0 else Inches(6.9)
-            width = Inches(6.0)
+            left = Inches(0.5)
+            width = Inches(12.3)
+            # 위쪽 기사: y=0.3, 아래쪽 기사: y=3.9
+            top_offset = Inches(0.3) if j == 0 else Inches(3.9)
 
-            # 제목
-            title_box = slide.shapes.add_textbox(left, Inches(0.4), width, Inches(1.0))
+            # 제목 (파란 글씨 + 밑줄)
+            title_box = slide.shapes.add_textbox(left, top_offset, width, Inches(0.7))
             tf_title = title_box.text_frame
             tf_title.word_wrap = True
             p_title = tf_title.paragraphs[0]
             p_title.text = article["title"]
             p_title.font.size = Pt(18)
             p_title.font.bold = True
-            p_title.font.color.rgb = RGBColor(33, 33, 33)
+            p_title.font.color.rgb = RGBColor(26, 115, 232)
+            p_title.font.underline = True
 
-            # 구분선
-            line = slide.shapes.add_shape(
-                1, left, Inches(1.5), width, Emu(0)
-            )
-            line.line.color.rgb = RGBColor(26, 115, 232)
-            line.line.width = Pt(2)
-
-            # 요약
-            summary_box = slide.shapes.add_textbox(left, Inches(1.7), width, Inches(4.5))
+            # 요약 (검은색 글씨)
+            summary_box = slide.shapes.add_textbox(left, top_offset + Inches(0.8), width, Inches(2.2))
             tf_summary = summary_box.text_frame
             tf_summary.word_wrap = True
             p_summary = tf_summary.paragraphs[0]
             p_summary.text = article.get("summary") or "요약 없음"
             p_summary.font.size = Pt(14)
-            p_summary.font.color.rgb = RGBColor(44, 62, 80)
-            p_summary.line_spacing = Pt(24)
+            p_summary.font.color.rgb = RGBColor(0, 0, 0)
+            p_summary.line_spacing = Pt(22)
 
             # URL
-            url_box = slide.shapes.add_textbox(left, Inches(6.3), width, Inches(0.5))
+            url_box = slide.shapes.add_textbox(left, top_offset + Inches(3.1), width, Inches(0.4))
             tf_url = url_box.text_frame
             tf_url.word_wrap = True
             p_url = tf_url.paragraphs[0]
