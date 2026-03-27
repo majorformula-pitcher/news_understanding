@@ -564,7 +564,11 @@ HTML_TEMPLATE = """
         .daily-item {
             background: white; margin-bottom: 20px; padding: 20px 25px; border-radius: 12px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.07); position: relative;
+            cursor: grab; transition: opacity 0.2s, transform 0.2s;
         }
+        .daily-item:active { cursor: grabbing; }
+        .daily-item.dragging { opacity: 0.4; transform: scale(0.98); }
+        .daily-item.drag-over { border-top: 3px solid #1a73e8; margin-top: -3px; }
         .daily-item h3 { color: #333; font-size: 18px; margin-bottom: 8px; padding-right: 80px; }
         .daily-item h3 a { text-decoration: none; color: inherit; }
         .daily-item .daily-summary { font-size: 15px; color: #2c3e50; line-height: 1.7; white-space: pre-wrap; }
@@ -1059,13 +1063,46 @@ HTML_TEMPLATE = """
                 return trimmed.startsWith('.');
             });
             var cleanSummary = summaryLines.length > 0 ? summaryLines.join('\\n') : item.summary;
-            return '<div class="daily-item">' +
+            return '<div class="daily-item" draggable="true" data-index="' + i + '">' +
                 '<button class="daily-remove" onclick="removeDaily(' + i + ')">×</button>' +
                 '<h3><span class="daily-order">' + (i + 1) + '</span><a href="' + escapeHtml(item.link) + '" target="_blank">' + escapeHtml(item.title) + '</a></h3>' +
                 (item.source ? '<span class="daily-source">' + escapeHtml(item.source) + '</span>' : '') +
                 '<div class="daily-summary">' + escapeHtml(cleanSummary) + '</div>' +
             '</div>';
         }).join('');
+
+        // 드래그 앤 드롭 이벤트 바인딩
+        var items = listDiv.querySelectorAll('.daily-item');
+        var dragSrcIndex = null;
+        items.forEach(function(item) {
+            item.addEventListener('dragstart', function(e) {
+                dragSrcIndex = parseInt(this.dataset.index);
+                this.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+            });
+            item.addEventListener('dragend', function() {
+                this.classList.remove('dragging');
+                items.forEach(function(el) { el.classList.remove('drag-over'); });
+            });
+            item.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                this.classList.add('drag-over');
+            });
+            item.addEventListener('dragleave', function() {
+                this.classList.remove('drag-over');
+            });
+            item.addEventListener('drop', function(e) {
+                e.preventDefault();
+                var dropIndex = parseInt(this.dataset.index);
+                if (dragSrcIndex === null || dragSrcIndex === dropIndex) return;
+                var daily = getDailyNews();
+                var moved = daily.splice(dragSrcIndex, 1)[0];
+                daily.splice(dropIndex, 0, moved);
+                saveDailyNews(daily);
+                renderDailyList();
+            });
+        });
     }
 
     function removeDaily(idx) {
