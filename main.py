@@ -236,7 +236,8 @@ async def get_news_content(url):
         async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as h_client:
             response = await h_client.get(url, headers=headers)
             status_code = response.status_code
-            html_text = response.text
+            # 메모리 절약: HTML 크기 제한 (1MB)
+            html_text = response.text[:1_000_000] if len(response.text) > 1_000_000 else response.text
             if status_code >= 400:
                 # 403/401이라도 HTML에 meta 태그가 있을 수 있으므로 파싱 시도
                 soup_err = BeautifulSoup(html_text, 'html.parser')
@@ -369,6 +370,9 @@ async def get_news_content(url):
         body = re.sub(r'[가-힣]{2,4}\s*기자(?!\w)', '', body)
         body = re.sub(r'\[\s*\]|\(\s*\)', '', body)
         body = '\n'.join([line.strip() for line in body.split('\n') if line.strip()])
+        # 메모리 절약: 본문 길이 제한 (5000자)
+        if len(body) > 5000:
+            body = body[:5000]
 
         if len(body) < 50:
             # meta description이라도 있으면 그것을 보여줌
@@ -435,10 +439,10 @@ async def parse_rss_and_fetch_news(rss_url):
                     'original_url': original_url,
                 })
 
-        # 최대 10개로 제한, 동시 요청 수 제한 (5개씩 배치 처리)
+        # 최대 10개로 제한, 동시 요청 수 제한 (3개씩 배치 처리)
         items = items[:10]
         fetched_results = []
-        batch_size = 5
+        batch_size = 3
         for b in range(0, len(items), batch_size):
             batch = items[b:b+batch_size]
             batch_tasks = [get_news_content(it['link']) for it in batch]
@@ -745,7 +749,7 @@ HTML_TEMPLATE = """
                     <button onclick="resetDatabase()" style="padding:12px 24px;background:#95a5a6;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;">DB 초기화</button>
                 </div>
             </div>
-            <div id="last-update-time" style="display:none;padding:8px 0;font-size:13px;color:#888;text-align:right;"></div>
+            <div id="last-update-time" style="display:none;padding:8px 0;font-size:13px;color:#888;text-align:left;"></div>
             <div id="daily-empty" class="home-screen" style="padding-top:40px;">
                 <div class="home-icon">📰</div>
                 <h2 class="home-title">Daily News가 비어 있습니다</h2>
