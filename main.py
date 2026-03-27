@@ -14,6 +14,7 @@ from pptx import Presentation
 from pptx.util import Inches, Pt, Emu
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
+import xlsxwriter
 
 app = FastAPI()
 
@@ -89,6 +90,33 @@ def save_articles_to_db(articles, publisher=""):
             supabase_error = f"DB 저장 오류: {e}"
             print(supabase_error)
 
+
+def load_all_articles():
+    """Supabase에서 전체 기사 목록 조회"""
+    if not supabase:
+        return []
+    try:
+        all_rows = []
+        offset = 0
+        batch_size = 1000
+        while True:
+            result = (
+                supabase.table("news-understanding")
+                .select("*")
+                .order("created_at", desc=True)
+                .range(offset, offset + batch_size - 1)
+                .execute()
+            )
+            if not result.data:
+                break
+            all_rows.extend(result.data)
+            if len(result.data) < batch_size:
+                break
+            offset += batch_size
+        return all_rows
+    except Exception as e:
+        print(f"DB 전체 조회 오류: {e}")
+        return []
 
 def load_articles_by_publisher(publisher):
     """Supabase에서 특정 제공자의 기사 목록 조회"""
@@ -652,7 +680,7 @@ HTML_TEMPLATE = """
         <div id="collect-status" style="text-align:center;padding:60px 20px;display:none;">
             <div id="collect-spinner" class="collect-spinner"></div>
             <h2 id="collect-status-text" style="color:#1a73e8;font-size:22px;margin-bottom:10px;">뉴스 정보를 수집 중입니다...</h2>
-            <p id="collect-status-sub" style="color:#888;font-size:15px;white-space:pre-wrap;text-align:left;max-width:800px;margin:0 auto;">잠시만 기다려주세요</p>
+            <p id="collect-status-sub" style="color:#888;font-size:15px;white-space:pre-wrap;text-align:center;max-width:800px;margin:0 auto;">잠시만 기다려주세요</p>
         </div>
 
         <!-- 피드 콘텐츠 헤더 -->
@@ -688,6 +716,7 @@ HTML_TEMPLATE = """
                     <button class="summarize-btn" onclick="collectNews()" id="collect-btn" style="padding:12px 24px;font-size:15px;">뉴스 업데이트</button>
                     <button class="ppt-btn" onclick="downloadDailyPPT()" id="daily-ppt-btn" style="display:none;">PPT 다운로드</button>
                     <button onclick="clearDaily()" id="daily-clear-btn" style="display:none;padding:12px 24px;background:#e74c3c;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;">전체 삭제</button>
+                    <button onclick="exportExcel()" style="padding:12px 24px;background:#217346;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;">DB 엑셀 Export</button>
                 </div>
             </div>
             <div id="daily-empty" class="home-screen" style="padding-top:40px;">
@@ -1142,6 +1171,23 @@ HTML_TEMPLATE = """
         }
     }
 
+    async function exportExcel() {
+        if (!confirm('전체 뉴스를 엑셀로 Export 하시겠습니까?')) return;
+        try {
+            const res = await fetch('/api/export-excel');
+            if (!res.ok) throw new Error('엑셀 생성 실패');
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'news_export.xlsx';
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            alert('엑셀 다운로드 중 오류가 발생했습니다: ' + e.message);
+        }
+    }
+
     async function downloadDailyPPT() {
         const daily = getDailyNews();
         if (daily.length === 0) { alert('선택된 뉴스가 없습니다.'); return; }
@@ -1178,18 +1224,21 @@ HTML_TEMPLATE = """
 
         try {
             const res = await fetch('/api/collect-news', { method: 'POST' });
+            var resText = await res.text();
             if (!res.ok) {
-                var errText = '';
-                try { var errData = await res.json(); errText = errData.detail || JSON.stringify(errData); } catch(x) { errText = await res.text(); }
-                throw new Error('서버 응답 오류 (HTTP ' + res.status + '): ' + errText);
+                var errDetail = '';
+                try { var errData = JSON.parse(resText); errDetail = errData.detail || resText; } catch(x) { errDetail = resText; }
+                throw new Error('서버 응답 오류 (HTTP ' + res.status + '): ' + errDetail);
             }
-            const data = await res.json();
+            const data = JSON.parse(resText);
             newsCollected = true;
             spinner.className = 'collect-spinner done';
             document.getElementById('collect-status-text').textContent = '뉴스 정보 수집이 완료됐습니다';
             document.getElementById('collect-status-sub').textContent = '총 ' + data.collected + '건의 뉴스가 수집되었습니다. 왼쪽 메뉴에서 뉴스 제공자를 선택하세요.';
             if (data.errors && data.errors.length > 0) {
-                document.getElementById('collect-status-sub').textContent += '\\n\\n⚠ 일부 피드 오류:\\n' + data.errors.join('\\n');
+                var subEl = document.getElementById('collect-status-sub');
+                subEl.textContent += '\\n\\n⚠ 일부 피드 오류:\\n' + data.errors.join('\\n');
+                subEl.style.textAlign = 'left';
             }
             var delay = (data.errors && data.errors.length > 0) ? 6000 : 3000;
             setTimeout(() => {
@@ -1392,6 +1441,51 @@ async def daily_ppt(request: Request):
         output,
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
         headers={"Content-Disposition": "attachment; filename=daily_news.pptx"},
+    )
+
+
+@app.get("/api/export-excel")
+async def api_export_excel():
+    """DB 전체 기사를 엑셀로 export"""
+    rows = load_all_articles()
+    if not rows:
+        return JSONResponse({"error": "데이터가 없습니다."}, status_code=400)
+
+    output = io.BytesIO()
+    workbook = xlsxwriter.Workbook(output, {'in_memory': True})
+    worksheet = workbook.add_worksheet('뉴스')
+
+    # 헤더 스타일
+    header_fmt = workbook.add_format({'bold': True, 'bg_color': '#1a73e8', 'font_color': '#ffffff', 'border': 1})
+    cell_fmt = workbook.add_format({'text_wrap': True, 'valign': 'top', 'border': 1})
+
+    headers = ['제목', '출처', 'URL', '요약', '본문', '발행일', '수집일']
+    for col, h in enumerate(headers):
+        worksheet.write(0, col, h, header_fmt)
+
+    worksheet.set_column(0, 0, 40)  # 제목
+    worksheet.set_column(1, 1, 15)  # 출처
+    worksheet.set_column(2, 2, 30)  # URL
+    worksheet.set_column(3, 3, 50)  # 요약
+    worksheet.set_column(4, 4, 60)  # 본문
+    worksheet.set_column(5, 5, 20)  # 발행일
+    worksheet.set_column(6, 6, 20)  # 수집일
+
+    for i, row in enumerate(rows):
+        worksheet.write(i + 1, 0, row.get('title', ''), cell_fmt)
+        worksheet.write(i + 1, 1, row.get('publisher', ''), cell_fmt)
+        worksheet.write(i + 1, 2, row.get('url', ''), cell_fmt)
+        worksheet.write(i + 1, 3, row.get('summary', ''), cell_fmt)
+        worksheet.write(i + 1, 4, row.get('content', ''), cell_fmt)
+        worksheet.write(i + 1, 5, row.get('published_at', ''), cell_fmt)
+        worksheet.write(i + 1, 6, row.get('created_at', ''), cell_fmt)
+
+    workbook.close()
+    output.seek(0)
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=news_export.xlsx"},
     )
 
 
