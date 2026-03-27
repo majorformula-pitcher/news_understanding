@@ -1153,10 +1153,6 @@ def generate_ppt(articles):
 
     # 타이틀 슬라이드
     slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank
-    background = slide.background
-    fill = background.fill
-    fill.solid()
-    fill.fore_color.rgb = RGBColor(220, 220, 220)
     txBox = slide.shapes.add_textbox(Inches(0.5), Inches(2.5), Inches(12.3), Inches(2))
     tf = txBox.text_frame
     tf.word_wrap = True
@@ -1177,12 +1173,6 @@ def generate_ppt(articles):
     for i in range(0, len(articles), 2):
         slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank
 
-        # 슬라이드 배경을 회색으로 설정
-        background = slide.background
-        fill = background.fill
-        fill.solid()
-        fill.fore_color.rgb = RGBColor(220, 220, 220)
-
         pair = articles[i:i+2]
 
         for j, article in enumerate(pair):
@@ -1190,36 +1180,42 @@ def generate_ppt(articles):
             width = Inches(12.3)
             # 위쪽 기사: y=0.3, 아래쪽 기사: y=3.9
             top_offset = Inches(0.3) if j == 0 else Inches(3.9)
+            box_height = Inches(3.3)
+
+            # 회색 배경 사각형 (기사 영역만)
+            bg_shape = slide.shapes.add_shape(
+                1, left, top_offset, width, box_height
+            )
+            bg_shape.fill.solid()
+            bg_shape.fill.fore_color.rgb = RGBColor(230, 230, 230)
+            bg_shape.line.fill.background()  # 테두리 없음
+
+            # 제목 + 요약을 하나의 텍스트박스에
+            content_box = slide.shapes.add_textbox(left + Inches(0.3), top_offset + Inches(0.2), width - Inches(0.6), box_height - Inches(0.4))
+            tf_content = content_box.text_frame
+            tf_content.word_wrap = True
 
             # 제목 (파란 글씨 + 밑줄)
-            title_box = slide.shapes.add_textbox(left, top_offset, width, Inches(0.7))
-            tf_title = title_box.text_frame
-            tf_title.word_wrap = True
-            p_title = tf_title.paragraphs[0]
+            p_title = tf_content.paragraphs[0]
             p_title.text = article["title"]
             p_title.font.size = Pt(18)
             p_title.font.bold = True
             p_title.font.color.rgb = RGBColor(26, 115, 232)
             p_title.font.underline = True
+            p_title.space_after = Pt(12)
 
-            # 요약 (검은색 글씨)
-            summary_box = slide.shapes.add_textbox(left, top_offset + Inches(0.8), width, Inches(2.2))
-            tf_summary = summary_box.text_frame
-            tf_summary.word_wrap = True
-            p_summary = tf_summary.paragraphs[0]
-            p_summary.text = article.get("summary") or "요약 없음"
-            p_summary.font.size = Pt(14)
-            p_summary.font.color.rgb = RGBColor(0, 0, 0)
-            p_summary.line_spacing = Pt(22)
-
-            # URL
-            url_box = slide.shapes.add_textbox(left, top_offset + Inches(3.1), width, Inches(0.4))
-            tf_url = url_box.text_frame
-            tf_url.word_wrap = True
-            p_url = tf_url.paragraphs[0]
-            p_url.text = article.get("link", "")
-            p_url.font.size = Pt(10)
-            p_url.font.color.rgb = RGBColor(150, 150, 150)
+            # 요약 내용을 줄별로 추가 (검은색 글씨, 불릿)
+            summary_text = article.get("summary") or "요약 없음"
+            for line in summary_text.split('\n'):
+                line = line.strip()
+                if not line:
+                    continue
+                p_sum = tf_content.add_paragraph()
+                p_sum.text = line
+                p_sum.font.size = Pt(13)
+                p_sum.font.color.rgb = RGBColor(0, 0, 0)
+                p_sum.line_spacing = Pt(20)
+                p_sum.space_before = Pt(2)
 
     output = io.BytesIO()
     prs.save(output)
