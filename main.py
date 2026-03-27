@@ -734,11 +734,13 @@ HTML_TEMPLATE = """
                 <p id="collect-status-sub" style="color:#888;font-size:15px;white-space:pre-wrap;text-align:center;max-width:800px;margin:0 auto;">잠시만 기다려주세요</p>
             </div>
             <h1 style="color:#1a73e8;font-size:32px;text-align:center;margin-bottom:15px;">Daily News</h1>
-            <div class="content-header" style="justify-content:flex-end;">
+            <div class="content-header" style="justify-content:space-between;">
                 <div style="display:flex;gap:10px;flex-wrap:wrap;">
                     <button class="summarize-btn" onclick="collectNews()" id="collect-btn" style="padding:12px 24px;font-size:15px;">뉴스 업데이트</button>
                     <button class="ppt-btn" onclick="downloadDailyPPT()" id="daily-ppt-btn" style="display:none;">PPT 다운로드</button>
                     <button onclick="clearDaily()" id="daily-clear-btn" style="display:none;padding:12px 24px;background:#e74c3c;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;">선택된 뉴스 전체 해제</button>
+                </div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;">
                     <button onclick="exportExcel()" style="padding:12px 24px;background:#217346;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;">DB 엑셀 Export</button>
                     <button onclick="resetDatabase()" style="padding:12px 24px;background:#95a5a6;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;">DB 초기화</button>
                 </div>
