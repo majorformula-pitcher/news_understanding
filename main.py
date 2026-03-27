@@ -318,11 +318,14 @@ async def get_news_content(url):
                 # script, style, nav, footer, aside 태그 제거
                 for tag in el.find_all(['script', 'style', 'nav', 'footer', 'aside', 'iframe', 'header']):
                     tag.decompose()
-                # Hugging Face: 메타 정보(작성자, 날짜, 카테고리 등) 제거
-                for tag in el.find_all('div', class_='not-prose'):
-                    tag.decompose()
-                for tag in el.find_all('div', class_='mb-4'):
-                    tag.decompose()
+                # Hugging Face: h2 이전의 메타 정보(제목, 작성자, 날짜 등) 모두 제거
+                first_h2 = el.find('h2')
+                if first_h2 and 'blog-content' in ' '.join(el.get('class', [])):
+                    for sibling in list(first_h2.previous_siblings):
+                        if hasattr(sibling, 'decompose'):
+                            sibling.decompose()
+                        elif hasattr(sibling, 'extract'):
+                            sibling.extract()
                 if len(el.get_text(strip=True)) > 100:
                     body_element = el
                     break
@@ -734,7 +737,7 @@ HTML_TEMPLATE = """
                     <button onclick="resetDatabase()" style="padding:12px 24px;background:#95a5a6;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;">DB 초기화</button>
                 </div>
             </div>
-            <div id="last-update-time" style="display:none;padding:8px 0;font-size:13px;color:#888;"></div>
+            <div id="last-update-time" style="display:none;padding:8px 0;font-size:13px;color:#888;text-align:right;"></div>
             <div id="daily-empty" class="home-screen" style="padding-top:40px;">
                 <div class="home-icon">📰</div>
                 <h2 class="home-title">Daily News가 비어 있습니다</h2>
