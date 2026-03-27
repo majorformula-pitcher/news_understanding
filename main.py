@@ -580,6 +580,7 @@ HTML_TEMPLATE = """
         }
         .collect-spinner.done { animation: none; border-color: #27ae60; border-top-color: #27ae60; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        .btn-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 6px; }
         .db-error { font-size: 13px; color: #c92a2a; background: #fff5f5; border: 1px solid #ffc9c9; border-radius: 8px; padding: 8px 15px; margin-bottom: 15px; }
         .empty-state { text-align: center; color: #888; padding: 60px 20px; font-size: 18px; }
 
@@ -727,9 +728,9 @@ HTML_TEMPLATE = """
                 <h2 id="collect-status-text" style="color:#1a73e8;font-size:22px;margin-bottom:10px;">뉴스 정보를 수집 중입니다...</h2>
                 <p id="collect-status-sub" style="color:#888;font-size:15px;white-space:pre-wrap;text-align:center;max-width:800px;margin:0 auto;">잠시만 기다려주세요</p>
             </div>
-            <div class="content-header">
-                <h1>Daily News</h1>
-                <div style="display:flex;gap:10px;">
+            <div style="text-align:center;margin-bottom:25px;">
+                <h1 style="color:#1a73e8;font-size:24px;margin-bottom:15px;">Daily News</h1>
+                <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
                     <button class="summarize-btn" onclick="collectNews()" id="collect-btn" style="padding:12px 24px;font-size:15px;">뉴스 업데이트</button>
                     <button class="ppt-btn" onclick="downloadDailyPPT()" id="daily-ppt-btn" style="display:none;">PPT 다운로드</button>
                     <button onclick="clearDaily()" id="daily-clear-btn" style="display:none;padding:12px 24px;background:#e74c3c;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;">전체 삭제</button>
@@ -1251,7 +1252,7 @@ HTML_TEMPLATE = """
     async function collectNews() {
         const btn = document.getElementById('collect-btn');
         btn.disabled = true;
-        btn.textContent = '수집 중...';
+        btn.innerHTML = '<span class="btn-spinner"></span>수집 중...';
         isCollecting = true;
 
         // 업데이트 시작 시간 표시
@@ -1524,18 +1525,29 @@ async def daily_ppt(request: Request):
 
 @app.post("/api/reset-db")
 async def api_reset_db():
-    """DB 전체 기사 삭제 및 ID 초기화"""
-    if not supabase:
+    """DB 전체 기사 삭제 및 ID 초기화 (TRUNCATE)"""
+    if not supabase or not SUPABASE_URL or not SUPABASE_KEY:
         return JSONResponse({"error": "DB 연결이 없습니다."}, status_code=500)
     try:
-        # 전체 행 삭제
-        result = supabase.table("news-understanding").delete().neq("id", -1).execute()
-        deleted = len(result.data) if result.data else 0
-        # ID 시퀀스 초기화 (Supabase SQL function 필요: reset_news_sequence)
-        try:
-            supabase.rpc("reset_news_sequence").execute()
-        except Exception:
-            pass  # 함수가 없으면 ID 리셋 생략
+        # 먼저 건수 확인
+        count_result = supabase.table("news-understanding").select("id", count="exact").execute()
+        deleted = count_result.count or 0
+
+        # TRUNCATE TABLE로 데이터 삭제 + ID 시퀀스 초기화
+        async with httpx.AsyncClient() as hc:
+            resp = await hc.post(
+                f"{SUPABASE_URL}/rest/v1/rpc/truncate_news",
+                headers={
+                    "apikey": SUPABASE_KEY,
+                    "Authorization": f"Bearer {SUPABASE_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={},
+            )
+            if resp.status_code >= 400:
+                # RPC 함수가 없으면 delete fallback
+                supabase.table("news-understanding").delete().neq("id", -1).execute()
+
         return JSONResponse({"status": "ok", "deleted": deleted})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
