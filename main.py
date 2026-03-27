@@ -738,7 +738,7 @@ HTML_TEMPLATE = """
                 <div style="display:flex;gap:10px;flex-wrap:wrap;">
                     <button class="summarize-btn" onclick="collectNews()" id="collect-btn" style="padding:12px 24px;font-size:15px;">뉴스 업데이트</button>
                     <button class="ppt-btn" onclick="downloadDailyPPT()" id="daily-ppt-btn" style="display:none;">PPT 다운로드</button>
-                    <button onclick="clearDaily()" id="daily-clear-btn" style="display:none;padding:12px 24px;background:#e74c3c;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;">전체 삭제</button>
+                    <button onclick="clearDaily()" id="daily-clear-btn" style="display:none;padding:12px 24px;background:#e74c3c;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;">선택된 뉴스 전체 해제</button>
                     <button onclick="exportExcel()" style="padding:12px 24px;background:#217346;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;">DB 엑셀 Export</button>
                     <button onclick="resetDatabase()" style="padding:12px 24px;background:#95a5a6;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;">DB 초기화</button>
                 </div>
@@ -1221,7 +1221,9 @@ HTML_TEMPLATE = """
             const res = await fetch('/api/reset-db', { method: 'POST' });
             const data = await res.json();
             if (res.ok) {
-                alert('DB가 초기화되었습니다. 총 ' + data.deleted + '건 삭제됨.');
+                var msg = 'DB가 초기화되었습니다. 총 ' + data.deleted + '건 삭제됨.';
+                if (!data.id_reset) msg += '\\n\\n(ID 초기화 실패: Supabase SQL Editor에서 truncate_news 함수를 생성해주세요)';
+                alert(msg);
                 loadNewsStats();
             } else {
                 alert('DB 초기화 오류: ' + (data.error || '알 수 없는 오류'));
@@ -1538,39 +1540,16 @@ async def api_reset_db():
         count_result = supabase.table("news-understanding").select("id", count="exact").execute()
         deleted = count_result.count or 0
 
-        # 데이터 삭제
-        supabase.table("news-understanding").delete().neq("id", -1).execute()
-
-        # ID 시퀀스 초기화 (여러 방법 시도)
-        reset_done = False
-
-        # 방법 1: RPC 함수 호출
+        # TRUNCATE TABLE 실행 (RPC 함수 truncate_news 필요)
+        id_reset = False
         try:
             supabase.rpc("truncate_news").execute()
-            reset_done = True
+            id_reset = True
         except Exception:
-            pass
+            # RPC 함수가 없으면 DELETE fallback (ID 리셋 안 됨)
+            supabase.table("news-understanding").delete().neq("id", -1).execute()
 
-        # 방법 2: Supabase SQL API 직접 호출
-        if not reset_done:
-            try:
-                async with httpx.AsyncClient() as hc:
-                    # service_role key로 SQL 실행
-                    resp = await hc.post(
-                        f"{SUPABASE_URL}/rest/v1/rpc/exec_sql",
-                        headers={
-                            "apikey": SUPABASE_KEY,
-                            "Authorization": f"Bearer {SUPABASE_KEY}",
-                            "Content-Type": "application/json",
-                        },
-                        json={"query": 'ALTER SEQUENCE "news-understanding_id_seq" RESTART WITH 1'},
-                    )
-                    if resp.status_code < 400:
-                        reset_done = True
-            except Exception:
-                pass
-
-        return JSONResponse({"status": "ok", "deleted": deleted, "id_reset": reset_done})
+        return JSONResponse({"status": "ok", "deleted": deleted, "id_reset": id_reset})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
