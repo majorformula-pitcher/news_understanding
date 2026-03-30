@@ -293,17 +293,18 @@ async def summarize_article_eng(title, body):
 
     if is_english:
         # 영문 원본: 제목은 그대로, 요약만 요청
-        prompt = f"""Read the following news article and summarize it in English, strictly following the format below.
+        prompt = f"""Read the following news article and summarize it in English.
 
-Format:
-. First key point (within 2 lines)
-. Second key point (within 2 lines)
+Your output must be EXACTLY 2 lines, nothing more, nothing less.
+Each line must start with '. ' (dot space).
+Each line must be ONE short sentence (under 30 words).
 
-Rules:
-- Do NOT include the article title. Write only the summary.
-- Summarize in exactly 2 sentences, each starting with '.'.
-- Be concise and deliver only the key points.
-- Do NOT use any markdown syntax (**, ##, *, # etc). Write in plain text only.
+Example output:
+. Company X announced a new product targeting enterprise customers.
+. The move comes as competition intensifies in the cloud computing market.
+
+Do NOT include the article title, any headers, or any other text.
+Do NOT use markdown syntax.
 
 Article title: {title}
 Article body: {body}"""
@@ -311,18 +312,14 @@ Article body: {body}"""
         # 한글 원본: 제목 번역 + 요약
         prompt = f"""Read the following news article and provide:
 1. An English translation of the article title (one line)
-2. A summary in English
+2. A summary in English (exactly 2 lines)
 
-Output format (follow exactly):
+Your output must be EXACTLY 3 lines in this format:
 TITLE: <English title here>
-. First key point (within 2 lines)
-. Second key point (within 2 lines)
+. <first key point in one short sentence, under 30 words>
+. <second key point in one short sentence, under 30 words>
 
-Rules:
-- The first line must start with "TITLE: " followed by the English translation of the article title.
-- Then summarize in exactly 2 sentences, each starting with '.'.
-- Be concise and deliver only the key points.
-- Do NOT use any markdown syntax (**, ##, *, # etc). Write in plain text only.
+Do NOT include any other text, headers, or markdown syntax.
 
 Article title: {title}
 Article body: {body}"""
@@ -576,8 +573,7 @@ async def parse_rss_and_fetch_news(rss_url):
                     'original_url': original_url,
                 })
 
-        # 최대 10개로 제한, 동시 요청 수 제한 (3개씩 배치 처리)
-        items = items[:10]
+        # 동시 요청 수 제한 (3개씩 배치 처리)
         fetched_results = []
         batch_size = 3
         for b in range(0, len(items), batch_size):
