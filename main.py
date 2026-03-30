@@ -276,15 +276,40 @@ async def summarize_article(title, body):
     except Exception as e:
         return f"요약 중 오류가 발생했습니다: {str(e)}"
 
+def _is_english_text(text):
+    """텍스트가 영문인지 판별 (한글이 없으면 영문으로 간주)"""
+    return not bool(re.search(r'[가-힣]', text))
+
+
 async def summarize_article_eng(title, body):
-    """영문 요약 + 영문 제목 번역을 동시 반환"""
+    """영문 요약 + 영문 제목 반환 (원본이 영문이면 제목은 그대로 사용)"""
     if not ANTHROPIC_API_KEY or not client:
         return "", ""
 
     if not body or body == "Content not found" or len(body) < 100:
         return "", ""
 
-    prompt = f"""Read the following news article and provide:
+    is_english = _is_english_text(title)
+
+    if is_english:
+        # 영문 원본: 제목은 그대로, 요약만 요청
+        prompt = f"""Read the following news article and summarize it in English, strictly following the format below.
+
+Format:
+. First key point (within 2 lines)
+. Second key point (within 2 lines)
+
+Rules:
+- Do NOT include the article title. Write only the summary.
+- Summarize in exactly 2 sentences, each starting with '.'.
+- Be concise and deliver only the key points.
+- Do NOT use any markdown syntax (**, ##, *, # etc). Write in plain text only.
+
+Article title: {title}
+Article body: {body}"""
+    else:
+        # 한글 원본: 제목 번역 + 요약
+        prompt = f"""Read the following news article and provide:
 1. An English translation of the article title (one line)
 2. A summary in English
 
@@ -316,7 +341,10 @@ Article body: {body}"""
         text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
         text = text.strip()
 
-        # TITLE: 줄 분리
+        if is_english:
+            return text, title  # 영문 원본이면 제목 그대로 반환
+
+        # 한글 원본: TITLE: 줄 분리
         title_eng = ""
         summary_lines = []
         for line in text.split('\n'):
