@@ -1538,7 +1538,7 @@ async def daily_ppt(request: Request):
 
 @app.post("/api/reset-db")
 async def api_reset_db():
-    """DB 전체 기사 삭제 및 ID 초기화 (TRUNCATE)"""
+    """DB 전체 기사 삭제"""
     if not supabase or not SUPABASE_URL or not SUPABASE_KEY:
         return JSONResponse({"error": "DB 연결이 없습니다."}, status_code=500)
     try:
@@ -1546,19 +1546,8 @@ async def api_reset_db():
         count_result = supabase.table("news-understanding").select("id", count="exact").execute()
         deleted = count_result.count or 0
 
-        # TRUNCATE TABLE + RESTART IDENTITY 직접 실행
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{SUPABASE_URL}/rest/v1/rpc/truncate_news",
-                headers={
-                    "apikey": SUPABASE_KEY,
-                    "Authorization": f"Bearer {SUPABASE_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={},
-            )
-            if resp.status_code >= 400:
-                raise Exception(f"TRUNCATE 실패 (HTTP {resp.status_code}): {resp.text}")
+        # 전체 삭제 (id > 0 조건으로 모든 행 삭제)
+        supabase.table("news-understanding").delete().gt("id", 0).execute()
 
         return JSONResponse({"status": "ok", "deleted": deleted, "id_reset": True})
     except Exception as e:
