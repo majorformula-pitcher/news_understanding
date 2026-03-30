@@ -578,16 +578,27 @@ async def parse_rss_and_fetch_news(rss_url):
         if len(items) > 50:
             items = items[:50]
 
-        # 동시 요청 수 제한 (3개씩 배치 처리)
+        # DB에 이미 저장된 URL 목록 조회하여 새 기사만 필터링
+        existing_urls = set()
+        if supabase:
+            try:
+                urls = [it['link'] for it in items]
+                result = supabase.table("news-understanding").select("url").in_("url", urls).execute()
+                existing_urls = {row["url"] for row in result.data}
+            except Exception:
+                pass
+        new_items = [it for it in items if it['link'] not in existing_urls]
+
+        # 새 기사만 웹페이지 스크래핑 (3개씩 배치 처리)
         fetched_results = []
         batch_size = 3
-        for b in range(0, len(items), batch_size):
-            batch = items[b:b+batch_size]
+        for b in range(0, len(new_items), batch_size):
+            batch = new_items[b:b+batch_size]
             batch_tasks = [get_news_content(it['link']) for it in batch]
             batch_results = await asyncio.gather(*batch_tasks)
             fetched_results.extend(batch_results)
 
-        for (title, body, page_date), it in zip(fetched_results, items):
+        for (title, body, page_date), it in zip(fetched_results, new_items):
             # 페이지 접근 실패 시 RSS 데이터로 대체
             if title.startswith("오류 발생:") or not body or body == "본문을 찾을 수 없습니다." or body.startswith("[추출 실패]") or body.startswith("[페이월"):
                 title = it['rss_title'] or title
