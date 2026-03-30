@@ -1623,7 +1623,7 @@ def generate_ppt(articles):
 
         # 한국어 요약 영역 (위쪽)
         ko_top = Inches(0.3)
-        ko_height = Inches(3.2)
+        ko_height = Inches(2.8)
         bg_ko = slide.shapes.add_shape(1, left, ko_top, width, ko_height)
         bg_ko.fill.solid()
         bg_ko.fill.fore_color.rgb = bg_color
@@ -1653,17 +1653,25 @@ def generate_ppt(articles):
             p_sum.line_spacing = Pt(20)
             p_sum.space_before = Pt(2)
 
-        # URL 표시
+        # URL 박스 (한국어 요약 아래, 흰색 배경)
         if article_url:
-            p_url_ko = tf_ko.add_paragraph()
+            url_top_ko = ko_top + ko_height + Inches(0.05)
+            url_height = Inches(0.3)
+            url_bg_ko = slide.shapes.add_shape(1, left, url_top_ko, width, url_height)
+            url_bg_ko.fill.solid()
+            url_bg_ko.fill.fore_color.rgb = RGBColor(255, 255, 255)
+            url_bg_ko.line.fill.background()
+            url_box_ko = slide.shapes.add_textbox(left + Inches(0.3), url_top_ko + Inches(0.05), width - Inches(0.6), url_height - Inches(0.1))
+            tf_url_ko = url_box_ko.text_frame
+            tf_url_ko.word_wrap = True
+            p_url_ko = tf_url_ko.paragraphs[0]
             p_url_ko.text = article_url
             p_url_ko.font.size = Pt(9)
             p_url_ko.font.color.rgb = url_color
-            p_url_ko.space_before = Pt(10)
 
         # 영문 요약 영역 (아래쪽) - 동일한 배경색과 폰트
-        en_top = Inches(3.8)
-        en_height = Inches(3.2)
+        en_top = Inches(3.75)
+        en_height = Inches(2.8)
         bg_en = slide.shapes.add_shape(1, left, en_top, width, en_height)
         bg_en.fill.solid()
         bg_en.fill.fore_color.rgb = bg_color
@@ -1693,13 +1701,20 @@ def generate_ppt(articles):
             p_eng.line_spacing = Pt(20)
             p_eng.space_before = Pt(2)
 
-        # URL 표시
+        # URL 박스 (영문 요약 아래, 흰색 배경)
         if article_url:
-            p_url_en = tf_en.add_paragraph()
+            url_top_en = en_top + en_height + Inches(0.05)
+            url_bg_en = slide.shapes.add_shape(1, left, url_top_en, width, url_height)
+            url_bg_en.fill.solid()
+            url_bg_en.fill.fore_color.rgb = RGBColor(255, 255, 255)
+            url_bg_en.line.fill.background()
+            url_box_en = slide.shapes.add_textbox(left + Inches(0.3), url_top_en + Inches(0.05), width - Inches(0.6), url_height - Inches(0.1))
+            tf_url_en = url_box_en.text_frame
+            tf_url_en.word_wrap = True
+            p_url_en = tf_url_en.paragraphs[0]
             p_url_en.text = article_url
             p_url_en.font.size = Pt(9)
             p_url_en.font.color.rgb = url_color
-            p_url_en.space_before = Pt(10)
 
     output = io.BytesIO()
     prs.save(output)
