@@ -295,9 +295,7 @@ async def summarize_article_eng(title, body):
         # 영문 원본: 제목은 그대로, 요약만 요청
         prompt = f"""Read the following news article and summarize it in English.
 
-Your output must be EXACTLY 2 lines, nothing more, nothing less.
-Each line must start with '. ' (dot space).
-Each line must be ONE short sentence (under 30 words).
+Your output must be EXACTLY 2 lines. Each line must start with '. ' (dot space).
 
 Example output:
 . Company X announced a new product targeting enterprise customers.
@@ -312,12 +310,12 @@ Article body: {body}"""
         # 한글 원본: 제목 번역 + 요약
         prompt = f"""Read the following news article and provide:
 1. An English translation of the article title (one line)
-2. A summary in English (exactly 2 lines)
+2. A summary in English (exactly 2 lines, each starting with '. ')
 
 Your output must be EXACTLY 3 lines in this format:
 TITLE: <English title here>
-. <first key point in one short sentence, under 30 words>
-. <second key point in one short sentence, under 30 words>
+. <first key point>
+. <second key point>
 
 Do NOT include any other text, headers, or markdown syntax.
 
