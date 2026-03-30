@@ -131,7 +131,7 @@ def load_articles_by_publisher(publisher):
             supabase.table("news-understanding")
             .select("*")
             .eq("publisher", publisher)
-            .order("created_at", desc=True)
+            .order("published_at", desc=True)
             .limit(50)
             .execute()
         )
@@ -334,6 +334,9 @@ Article body: {body}"""
         text = re.sub(r'#+\s*', '', text)
         text = re.sub(r'`+', '', text)
         text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+        text = text.strip()
+        # 요약 줄 분리: 문장 끝(. ) 뒤에 바로 '. '로 시작하는 새 줄이 붙어있으면 줄바꿈 추가
+        text = re.sub(r'(?<=\.)\s+(?=\.\s)', '\n', text)
         text = text.strip()
 
         if is_english:
