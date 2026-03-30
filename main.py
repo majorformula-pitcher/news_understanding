@@ -574,6 +574,10 @@ async def parse_rss_and_fetch_news(rss_url):
                     'original_url': original_url,
                 })
 
+        # RSS 아이템이 너무 많으면 최근 50개만 처리
+        if len(items) > 50:
+            items = items[:50]
+
         # 동시 요청 수 제한 (3개씩 배치 처리)
         fetched_results = []
         batch_size = 3
@@ -1621,9 +1625,12 @@ def generate_ppt(articles):
         font_color = RGBColor(0, 0, 0)
         title_color = RGBColor(0, 51, 153)
 
+        article_url = article.get("link", "")
+        url_color = RGBColor(100, 100, 100)
+
         # 한국어 요약 영역 (위쪽)
         ko_top = Inches(0.3)
-        ko_height = Inches(3.3)
+        ko_height = Inches(3.2)
         bg_ko = slide.shapes.add_shape(1, left, ko_top, width, ko_height)
         bg_ko.fill.solid()
         bg_ko.fill.fore_color.rgb = bg_color
@@ -1653,9 +1660,17 @@ def generate_ppt(articles):
             p_sum.line_spacing = Pt(20)
             p_sum.space_before = Pt(2)
 
+        # URL 표시
+        if article_url:
+            p_url_ko = tf_ko.add_paragraph()
+            p_url_ko.text = article_url
+            p_url_ko.font.size = Pt(9)
+            p_url_ko.font.color.rgb = url_color
+            p_url_ko.space_before = Pt(10)
+
         # 영문 요약 영역 (아래쪽) - 동일한 배경색과 폰트
-        en_top = Inches(3.9)
-        en_height = Inches(3.3)
+        en_top = Inches(3.8)
+        en_height = Inches(3.2)
         bg_en = slide.shapes.add_shape(1, left, en_top, width, en_height)
         bg_en.fill.solid()
         bg_en.fill.fore_color.rgb = bg_color
@@ -1684,6 +1699,14 @@ def generate_ppt(articles):
             p_eng.font.color.rgb = font_color
             p_eng.line_spacing = Pt(20)
             p_eng.space_before = Pt(2)
+
+        # URL 표시
+        if article_url:
+            p_url_en = tf_en.add_paragraph()
+            p_url_en.text = article_url
+            p_url_en.font.size = Pt(9)
+            p_url_en.font.color.rgb = url_color
+            p_url_en.space_before = Pt(10)
 
     output = io.BytesIO()
     prs.save(output)
