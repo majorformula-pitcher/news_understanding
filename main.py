@@ -919,13 +919,23 @@ HTML_TEMPLATE = """
     function formatPubDate(raw) {
         if (!raw) return '';
         try {
-            const d = new Date(raw);
+            // 타임존 없는 날짜(예: 2026-03-30 13:50:29)는 이미 KST이므로 그대로 파싱
+            var s = String(raw).trim();
+            // YYYY-MM-DD HH:MM:SS 형식 직접 처리
+            var match = s.match(/^(\\d{4})-(\\d{2})-(\\d{2})\\s+(\\d{2}):(\\d{2})/);
+            if (match) {
+                return match[1] + '.' + match[2] + '.' + match[3] + ' ' + match[4] + ':' + match[5];
+            }
+            // RFC 2822 등 타임존이 포함된 형식은 Date 객체로 KST 변환
+            const d = new Date(s);
             if (isNaN(d.getTime())) return raw;
-            const y = d.getFullYear();
-            const m = String(d.getMonth() + 1).padStart(2, '0');
-            const day = String(d.getDate()).padStart(2, '0');
-            const h = String(d.getHours()).padStart(2, '0');
-            const min = String(d.getMinutes()).padStart(2, '0');
+            // KST(UTC+9)로 변환
+            const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+            const y = kst.getUTCFullYear();
+            const m = String(kst.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(kst.getUTCDate()).padStart(2, '0');
+            const h = String(kst.getUTCHours()).padStart(2, '0');
+            const min = String(kst.getUTCMinutes()).padStart(2, '0');
             return y + '.' + m + '.' + day + ' ' + h + ':' + min;
         } catch { return raw; }
     }
