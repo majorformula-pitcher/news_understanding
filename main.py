@@ -672,13 +672,14 @@ HTML_TEMPLATE = """
         .article-layout { display: flex; gap: 25px; margin-top: 15px; align-items: flex-start; }
         .article-body { flex: 0 0 auto; width: 50%; font-size: 15px; line-height: 1.8; color: #444; max-height: 500px; overflow-y: auto; padding-right: 15px; }
 
-        .summary-section { flex: 0 0 800px; background-color: #fff9db; border: 2px solid #fab005; border-radius: 12px; padding: 20px; position: sticky; top: 20px; display: none; }
+        .summary-section { background-color: #fff9db; border: 2px solid #fab005; border-radius: 12px; padding: 20px; display: none; }
         .summary-section.visible { display: block; }
         .summary-section h3 { margin-top: 0; color: #e67e22; font-size: 18px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #ffe066; padding-bottom: 10px; }
         .summary-content { font-size: 16px; color: #2c3e50; font-weight: 600; line-height: 1.6; white-space: pre-wrap; }
         .summary-title { font-size: 16px; font-weight: bold; color: #333; margin-bottom: 6px; }
-        .summary-eng-section { background-color: #fff9db; border: 2px solid #fab005; border-radius: 12px; padding: 20px; margin-top: 10px; }
+        .summary-eng-section { background-color: #fff9db; border: 2px solid #fab005; border-radius: 12px; padding: 20px; margin-top: 15px; }
         .summary-eng-section.hidden { display: none; }
+        .summary-wrapper { flex: 0 0 800px; position: sticky; top: 20px; }
 
         .btn-row { display: flex; gap: 10px; margin-top: 20px; align-items: center; }
         .original-btn { display: inline-block; padding: 8px 18px; border: 1px solid #1a73e8; color: #1a73e8; text-decoration: none; border-radius: 6px; font-size: 13px; transition: all 0.3s; }
@@ -1032,13 +1033,15 @@ HTML_TEMPLATE = """
                 '</h2>' +
                 '<div class="article-layout">' +
                     '<div class="article-body">' + escapeHtml(a.body) + '</div>' +
-                    '<div class="summary-section' + (hasSummary ? ' visible' : '') + '" id="summary-' + i + '">' +
-                        '<div class="summary-title">' + escapeHtml(a.title) + '</div>' +
-                        '<div class="summary-content">' + (hasSummary ? escapeHtml(a.summary) : '') + '</div>' +
-                    '</div>' +
-                    '<div class="summary-eng-section' + ((a.summary_eng || a.title_eng) ? '' : ' hidden') + '" id="summary-eng-section-' + i + '">' +
-                        '<div class="summary-title">' + escapeHtml(a.title_eng || '') + '</div>' +
-                        '<div class="summary-content">' + escapeHtml(a.summary_eng || '') + '</div>' +
+                    '<div class="summary-wrapper">' +
+                        '<div class="summary-section' + (hasSummary ? ' visible' : '') + '" id="summary-' + i + '">' +
+                            '<div class="summary-title">' + escapeHtml(a.title) + '</div>' +
+                            '<div class="summary-content">' + (hasSummary ? escapeHtml(a.summary) : '') + '</div>' +
+                        '</div>' +
+                        '<div class="summary-eng-section' + ((a.summary_eng || a.title_eng) ? '' : ' hidden') + '" id="summary-eng-section-' + i + '">' +
+                            '<div class="summary-title">' + escapeHtml(a.title_eng || '') + '</div>' +
+                            '<div class="summary-content">' + escapeHtml(a.summary_eng || '') + '</div>' +
+                        '</div>' +
                     '</div>' +
                 '</div>' +
                 '<div class="btn-row">' +
@@ -1088,13 +1091,15 @@ HTML_TEMPLATE = """
                 '</h2>' +
                 '<div class="article-layout">' +
                     '<div class="article-body">' + escapeHtml(a.body) + '</div>' +
-                    '<div class="summary-section' + (hasSummary ? ' visible' : '') + '" id="summary-' + i + '">' +
-                        '<div class="summary-title">' + escapeHtml(a.title) + '</div>' +
-                        '<div class="summary-content">' + (hasSummary ? escapeHtml(a.summary) : '') + '</div>' +
-                    '</div>' +
-                    '<div class="summary-eng-section' + ((a.summary_eng || a.title_eng) ? '' : ' hidden') + '" id="summary-eng-section-' + i + '">' +
-                        '<div class="summary-title">' + escapeHtml(a.title_eng || '') + '</div>' +
-                        '<div class="summary-content">' + escapeHtml(a.summary_eng || '') + '</div>' +
+                    '<div class="summary-wrapper">' +
+                        '<div class="summary-section' + (hasSummary ? ' visible' : '') + '" id="summary-' + i + '">' +
+                            '<div class="summary-title">' + escapeHtml(a.title) + '</div>' +
+                            '<div class="summary-content">' + (hasSummary ? escapeHtml(a.summary) : '') + '</div>' +
+                        '</div>' +
+                        '<div class="summary-eng-section' + ((a.summary_eng || a.title_eng) ? '' : ' hidden') + '" id="summary-eng-section-' + i + '">' +
+                            '<div class="summary-title">' + escapeHtml(a.title_eng || '') + '</div>' +
+                            '<div class="summary-content">' + escapeHtml(a.summary_eng || '') + '</div>' +
+                        '</div>' +
                     '</div>' +
                 '</div>' +
                 '<div class="btn-row">' +
