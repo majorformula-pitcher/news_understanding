@@ -127,14 +127,24 @@ def load_articles_by_publisher(publisher):
     if not supabase:
         return []
     try:
-        result = (
-            supabase.table("news-understanding")
-            .select("*")
-            .eq("publisher", publisher)
-            .order("published_at", desc=True)
-            .limit(50)
-            .execute()
-        )
+        all_rows = []
+        offset = 0
+        batch_size = 1000
+        while True:
+            result = (
+                supabase.table("news-understanding")
+                .select("*")
+                .eq("publisher", publisher)
+                .order("published_at", desc=True)
+                .range(offset, offset + batch_size - 1)
+                .execute()
+            )
+            if not result.data:
+                break
+            all_rows.extend(result.data)
+            if len(result.data) < batch_size:
+                break
+            offset += batch_size
         return [
             {
                 "title": row["title"],
@@ -147,7 +157,7 @@ def load_articles_by_publisher(publisher):
                 "publisher": row.get("publisher", ""),
                 "is_daily": row.get("is_daily", False),
             }
-            for row in result.data
+            for row in all_rows
         ]
     except Exception as e:
         supabase_error = f"DB 조회 오류: {e}"
