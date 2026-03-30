@@ -823,13 +823,6 @@ HTML_TEMPLATE = """
            onclick="loadFeedFromDB({{ loop.index0 }}, '{{ feed.name }}')">
             {{ feed.name }}
         </a>
-        {% else %}
-        <a href="javascript:void(0)"
-           class="feed-tab disabled-tab"
-           style="color:#555;cursor:not-allowed;opacity:0.5;"
-           title="준비 중">
-            {{ feed.name }}
-        </a>
         {% endif %}
         {% endfor %}
         <a href="javascript:void(0)"
