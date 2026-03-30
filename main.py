@@ -140,9 +140,11 @@ def load_articles_by_publisher(publisher):
                 "title": row["title"],
                 "body": row["content"],
                 "summary": row.get("summary", ""),
+                "summary_eng": row.get("summary_eng", ""),
                 "link": row["url"],
                 "pub_date": row.get("published_at", ""),
                 "publisher": row.get("publisher", ""),
+                "is_daily": row.get("is_daily", False),
             }
             for row in result.data
         ]
@@ -152,18 +154,65 @@ def load_articles_by_publisher(publisher):
         return []
 
 
-def update_article_summary(url, summary):
-    """기사 URL로 summary 컬럼만 업데이트"""
+def update_article_summary(url, summary, summary_eng=""):
+    """기사 URL로 summary 컬럼 업데이트"""
     if not supabase:
         return False
     try:
+        data = {"summary": summary}
+        if summary_eng:
+            data["summary_eng"] = summary_eng
         supabase.table("news-understanding").update(
-            {"summary": summary}
+            data
         ).eq("url", url).execute()
         return True
     except Exception as e:
         print(f"Summary 업데이트 오류: {e}")
         return False
+
+
+def update_article_daily(url, is_daily):
+    """기사 URL로 is_daily 컬럼 업데이트"""
+    if not supabase:
+        return False
+    try:
+        supabase.table("news-understanding").update(
+            {"is_daily": is_daily}
+        ).eq("url", url).execute()
+        return True
+    except Exception as e:
+        print(f"is_daily 업데이트 오류: {e}")
+        return False
+
+
+def load_daily_articles():
+    """is_daily=True인 기사 목록 조회"""
+    if not supabase:
+        return []
+    try:
+        result = (
+            supabase.table("news-understanding")
+            .select("*")
+            .eq("is_daily", True)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return [
+            {
+                "title": row["title"],
+                "body": row["content"],
+                "summary": row.get("summary", ""),
+                "summary_eng": row.get("summary_eng", ""),
+                "link": row["url"],
+                "pub_date": row.get("published_at", ""),
+                "publisher": row.get("publisher", ""),
+                "is_daily": True,
+            }
+            for row in result.data
+        ]
+    except Exception as e:
+        print(f"Daily 기사 조회 오류: {e}")
+        return []
 
 
 def get_news_stats():
@@ -222,6 +271,46 @@ async def summarize_article(title, body):
         return text.strip()
     except Exception as e:
         return f"요약 중 오류가 발생했습니다: {str(e)}"
+
+async def summarize_article_eng(title, body):
+    if not ANTHROPIC_API_KEY or not client:
+        return ""
+
+    if not body or body == "Content not found" or len(body) < 100:
+        return ""
+
+    prompt = f"""Read the following news article and summarize it in English, strictly following the format below.
+
+Format:
+. First key point (within 2 lines)
+. Second key point (within 2 lines)
+
+Rules:
+- Do NOT include the article title. Write only the summary.
+- Summarize in exactly 2 sentences, each starting with '.'.
+- Be concise and deliver only the key points.
+- Do NOT use any markdown syntax (**, ##, *, # etc). Write in plain text only.
+
+Article title: {title}
+Article body: {body}"""
+
+    try:
+        response = await client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1024,
+            system="You are a news summarization expert.",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        text = response.content[0].text.strip()
+        text = re.sub(r'\*+', '', text)
+        text = re.sub(r'#+\s*', '', text)
+        text = re.sub(r'`+', '', text)
+        text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+        return text.strip()
+    except Exception as e:
+        print(f"영문 요약 오류: {e}")
+        return ""
+
 
 async def get_news_content(url):
     headers = {
@@ -785,13 +874,22 @@ HTML_TEMPLATE = """
         return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
-    // Daily News localStorage 관리
+    // Daily News 관리 (DB 기반)
+    var dailyNewsCache = [];
+
     function getDailyNews() {
-        try { return JSON.parse(localStorage.getItem('dailyNews') || '[]'); }
-        catch { return []; }
+        return dailyNewsCache;
     }
-    function saveDailyNews(list) {
-        localStorage.setItem('dailyNews', JSON.stringify(list));
+
+    async function loadDailyNewsFromDB() {
+        try {
+            const res = await fetch('/api/daily-articles');
+            const data = await res.json();
+            dailyNewsCache = (data.articles || []).map(a => ({
+                title: a.title, link: a.link, summary: a.summary,
+                summary_eng: a.summary_eng || '', source: a.publisher
+            }));
+        } catch (e) { dailyNewsCache = []; }
     }
 
     // 섹션 표시 관리
@@ -893,9 +991,6 @@ HTML_TEMPLATE = """
             return;
         }
 
-        const daily = getDailyNews();
-        const dailyLinks = daily.map(d => d.link);
-
         container.innerHTML = articles.map((a, i) => {
             if (a.error) {
                 return '<div class="result-item" style="opacity:0.6;">' +
@@ -903,7 +998,7 @@ HTML_TEMPLATE = """
                     '<p style="color:#e74c3c;">' + escapeHtml(a.body) + '</p>' +
                 '</div>';
             }
-            const isSelected = dailyLinks.includes(a.link);
+            const isSelected = a.is_daily;
             const hasSummary = a.summary && a.summary.trim().length > 0;
             const dateFormatted = formatPubDate(a.pub_date);
             return '<div class="result-item" id="article-' + i + '">' +
@@ -954,11 +1049,8 @@ HTML_TEMPLATE = """
             return;
         }
 
-        const daily = getDailyNews();
-        const dailyLinks = daily.map(d => d.link);
-
         container.innerHTML = articles.map((a, i) => {
-            const isSelected = dailyLinks.includes(a.link);
+            const isSelected = a.is_daily;
             const hasSummary = a.summary && a.summary.trim().length > 0;
             const dateFormatted = formatPubDate(a.pub_date);
             return '<div class="result-item" id="article-' + i + '">' +
@@ -989,16 +1081,25 @@ HTML_TEMPLATE = """
         const summaryDiv = document.getElementById('summary-' + idx);
         const contentDiv = summaryDiv.querySelector('.summary-content');
 
-        // 이미 선택된 경우 → 선택 해제 (요약 내용은 DB와 화면에 유지)
-        const daily = getDailyNews();
-        const dailyIdx = daily.findIndex(d => d.link === article.link);
-        if (dailyIdx !== -1) {
-            daily.splice(dailyIdx, 1);
-            saveDailyNews(daily);
-            btn.textContent = 'Daily News 로 선택';
-            btn.classList.remove('selected');
+        // 이미 선택된 경우 → 선택 해제
+        if (article.is_daily) {
+            btn.disabled = true;
+            btn.textContent = '해제 중...';
+            try {
+                await fetch('/api/toggle-daily', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ link: article.link, is_daily: false })
+                });
+                articles[idx].is_daily = false;
+                btn.textContent = 'Daily News 로 선택';
+                btn.classList.remove('selected');
+                await loadDailyNewsFromDB();
+                renderDailyList();
+            } catch (e) {
+                btn.textContent = '선택됨';
+            }
             btn.disabled = false;
-            renderDailyList();
             return;
         }
 
@@ -1007,11 +1108,23 @@ HTML_TEMPLATE = """
             (summaryDiv.classList.contains('visible') ? contentDiv.textContent : null);
 
         if (existingSummary && existingSummary !== 'AI가 요약하는 중입니다...' && existingSummary !== '요약 중 오류가 발생했습니다.') {
-            daily.push({ title: article.title, link: article.link, summary: existingSummary, source: currentFeedName });
-            saveDailyNews(daily);
-            btn.textContent = '선택됨';
-            btn.classList.add('selected');
-            renderDailyList();
+            btn.disabled = true;
+            btn.textContent = '선택 중...';
+            try {
+                await fetch('/api/toggle-daily', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ link: article.link, is_daily: true })
+                });
+                articles[idx].is_daily = true;
+                btn.textContent = '선택됨';
+                btn.classList.add('selected');
+                await loadDailyNewsFromDB();
+                renderDailyList();
+            } catch (e) {
+                btn.textContent = 'Daily News 로 선택';
+            }
+            btn.disabled = false;
             return;
         }
 
@@ -1029,16 +1142,20 @@ HTML_TEMPLATE = """
             });
             const data = await res.json();
             contentDiv.textContent = data.summary;
-            // 로컬 articles 배열도 업데이트
             articles[idx].summary = data.summary;
 
-            const daily2 = getDailyNews();
-            daily2.push({ title: article.title, link: article.link, summary: data.summary, source: currentFeedName });
-            saveDailyNews(daily2);
+            // is_daily = true로 설정
+            await fetch('/api/toggle-daily', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ link: article.link, is_daily: true })
+            });
+            articles[idx].is_daily = true;
 
             btn.textContent = '선택됨';
             btn.classList.add('selected');
             btn.disabled = false;
+            await loadDailyNewsFromDB();
             renderDailyList();
 
             const sumBtn = document.getElementById('article-' + idx).querySelector('.summarize-btn');
@@ -1073,6 +1190,7 @@ HTML_TEMPLATE = """
             btn.textContent = '요약 완료';
             // 로컬 articles 배열도 업데이트
             articles[idx].summary = data.summary;
+            if (data.summary_eng) articles[idx].summary_eng = data.summary_eng;
         } catch (e) {
             contentDiv.textContent = '요약 중 오류가 발생했습니다.';
             btn.textContent = '요약하기';
@@ -1180,28 +1298,39 @@ HTML_TEMPLATE = """
                 var rect = this.getBoundingClientRect();
                 var midY = rect.top + rect.height / 2;
                 var dropIndex = e.clientY < midY ? targetIndex : targetIndex + 1;
-                var daily = getDailyNews();
-                var moved = daily.splice(dragSrcIndex, 1)[0];
+                var moved = dailyNewsCache.splice(dragSrcIndex, 1)[0];
                 if (dropIndex > dragSrcIndex) dropIndex--;
-                daily.splice(dropIndex, 0, moved);
-                saveDailyNews(daily);
+                dailyNewsCache.splice(dropIndex, 0, moved);
                 renderDailyList();
             });
         });
     }
 
-    function removeDaily(idx) {
+    async function removeDaily(idx) {
         const daily = getDailyNews();
-        daily.splice(idx, 1);
-        saveDailyNews(daily);
+        if (idx < 0 || idx >= daily.length) return;
+        const item = daily[idx];
+        await fetch('/api/toggle-daily', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ link: item.link, is_daily: false })
+        });
+        await loadDailyNewsFromDB();
         renderDailyList();
     }
 
-    function clearDaily() {
-        if (confirm('선택한 Daily News를 모두 삭제하시겠습니까?')) {
-            saveDailyNews([]);
-            renderDailyList();
-        }
+    async function clearDaily() {
+        if (!confirm('선택한 Daily News를 모두 해제하시겠습니까?')) return;
+        const daily = getDailyNews();
+        await Promise.all(daily.map(item =>
+            fetch('/api/toggle-daily', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ link: item.link, is_daily: false })
+            })
+        ));
+        await loadDailyNewsFromDB();
+        renderDailyList();
     }
 
     async function exportExcel() {
@@ -1339,16 +1468,17 @@ HTML_TEMPLATE = """
     }
 
     // Home 탭 클릭
-    document.querySelector('.feed-tab.home-tab').addEventListener('click', function(e) {
+    document.querySelector('.feed-tab.home-tab').addEventListener('click', async function(e) {
         e.preventDefault();
         setActiveTab(null);
         showSection('home');
+        await loadDailyNewsFromDB();
         renderDailyList();
     });
 
     // 초기화: 홈 화면 표시
     showSection('home');
-    renderDailyList();
+    loadDailyNewsFromDB().then(function() { renderDailyList(); });
     </script>
 </body>
 </html>
@@ -1472,20 +1602,46 @@ async def api_articles(publisher: str = ""):
 
 @app.post("/api/summarize")
 async def api_summarize(request: Request):
-    """개별 기사 요약 API"""
+    """개별 기사 요약 API (한국어 + 영어 동시 진행)"""
     data = await request.json()
     title = data.get("title", "")
     body = data.get("body", "")
     link = data.get("link", "")
     publisher = data.get("publisher", "")
-    summary = await summarize_article(title, body)
-    # DB의 summary 컬럼만 업데이트
+    # 한국어/영어 요약 동시 실행
+    summary, summary_eng = await asyncio.gather(
+        summarize_article(title, body),
+        summarize_article_eng(title, body),
+    )
+    # DB 업데이트
     if summary and link:
-        updated = update_article_summary(link, summary)
+        updated = update_article_summary(link, summary, summary_eng)
         if not updated:
-            # fallback: 전체 upsert
             save_articles_to_db([{"title": title, "body": body, "link": link, "summary": summary}], publisher=publisher)
-    return JSONResponse({"summary": summary})
+            if summary_eng:
+                update_article_summary(link, summary, summary_eng)
+    return JSONResponse({"summary": summary, "summary_eng": summary_eng})
+
+
+@app.post("/api/toggle-daily")
+async def api_toggle_daily(request: Request):
+    """기사의 is_daily 토글"""
+    data = await request.json()
+    link = data.get("link", "")
+    is_daily = data.get("is_daily", False)
+    if not link:
+        return JSONResponse({"error": "link 필요"}, status_code=400)
+    ok = update_article_daily(link, is_daily)
+    if not ok:
+        return JSONResponse({"error": "업데이트 실패"}, status_code=500)
+    return JSONResponse({"status": "ok", "is_daily": is_daily})
+
+
+@app.get("/api/daily-articles")
+async def api_daily_articles():
+    """is_daily=True인 기사 목록 조회"""
+    articles = load_daily_articles()
+    return JSONResponse({"articles": articles})
 
 
 @app.get("/api/news-stats")
