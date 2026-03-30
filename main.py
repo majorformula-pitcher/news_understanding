@@ -138,6 +138,7 @@ def load_articles_by_publisher(publisher):
         return [
             {
                 "title": row["title"],
+                "title_eng": row.get("title_eng", ""),
                 "body": row["content"],
                 "summary": row.get("summary", ""),
                 "summary_eng": row.get("summary_eng", ""),
@@ -154,7 +155,7 @@ def load_articles_by_publisher(publisher):
         return []
 
 
-def update_article_summary(url, summary, summary_eng=""):
+def update_article_summary(url, summary, summary_eng="", title_eng=""):
     """기사 URL로 summary 컬럼 업데이트"""
     if not supabase:
         return False
@@ -162,6 +163,8 @@ def update_article_summary(url, summary, summary_eng=""):
         data = {"summary": summary}
         if summary_eng:
             data["summary_eng"] = summary_eng
+        if title_eng:
+            data["title_eng"] = title_eng
         supabase.table("news-understanding").update(
             data
         ).eq("url", url).execute()
@@ -200,6 +203,7 @@ def load_daily_articles():
         return [
             {
                 "title": row["title"],
+                "title_eng": row.get("title_eng", ""),
                 "body": row["content"],
                 "summary": row.get("summary", ""),
                 "summary_eng": row.get("summary_eng", ""),
@@ -273,21 +277,25 @@ async def summarize_article(title, body):
         return f"요약 중 오류가 발생했습니다: {str(e)}"
 
 async def summarize_article_eng(title, body):
+    """영문 요약 + 영문 제목 번역을 동시 반환"""
     if not ANTHROPIC_API_KEY or not client:
-        return ""
+        return "", ""
 
     if not body or body == "Content not found" or len(body) < 100:
-        return ""
+        return "", ""
 
-    prompt = f"""Read the following news article and summarize it in English, strictly following the format below.
+    prompt = f"""Read the following news article and provide:
+1. An English translation of the article title (one line)
+2. A summary in English
 
-Format:
+Output format (follow exactly):
+TITLE: <English title here>
 . First key point (within 2 lines)
 . Second key point (within 2 lines)
 
 Rules:
-- Do NOT include the article title. Write only the summary.
-- Summarize in exactly 2 sentences, each starting with '.'.
+- The first line must start with "TITLE: " followed by the English translation of the article title.
+- Then summarize in exactly 2 sentences, each starting with '.'.
 - Be concise and deliver only the key points.
 - Do NOT use any markdown syntax (**, ##, *, # etc). Write in plain text only.
 
@@ -298,7 +306,7 @@ Article body: {body}"""
         response = await client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=1024,
-            system="You are a news summarization expert.",
+            system="You are a news summarization and translation expert.",
             messages=[{"role": "user", "content": prompt}]
         )
         text = response.content[0].text.strip()
@@ -306,10 +314,22 @@ Article body: {body}"""
         text = re.sub(r'#+\s*', '', text)
         text = re.sub(r'`+', '', text)
         text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
-        return text.strip()
+        text = text.strip()
+
+        # TITLE: 줄 분리
+        title_eng = ""
+        summary_lines = []
+        for line in text.split('\n'):
+            stripped = line.strip()
+            if stripped.upper().startswith('TITLE:'):
+                title_eng = stripped[6:].strip()
+            elif stripped:
+                summary_lines.append(stripped)
+        summary_eng = '\n'.join(summary_lines)
+        return summary_eng, title_eng
     except Exception as e:
         print(f"영문 요약 오류: {e}")
-        return ""
+        return "", ""
 
 
 async def get_news_content(url):
@@ -656,8 +676,9 @@ HTML_TEMPLATE = """
         .summary-section.visible { display: block; }
         .summary-section h3 { margin-top: 0; color: #e67e22; font-size: 18px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #ffe066; padding-bottom: 10px; }
         .summary-content { font-size: 16px; color: #2c3e50; font-weight: 600; line-height: 1.6; white-space: pre-wrap; }
-        .summary-eng-label { font-size: 14px; color: #e67e22; font-weight: bold; margin-top: 12px; padding-top: 10px; border-top: 1px solid #ffe066; }
-        .summary-eng { color: #34495e; }
+        .summary-title { font-size: 16px; font-weight: bold; color: #333; margin-bottom: 6px; }
+        .summary-eng-section { background-color: #fff9db; border: 2px solid #fab005; border-radius: 12px; padding: 20px; margin-top: 10px; }
+        .summary-eng-section.hidden { display: none; }
 
         .btn-row { display: flex; gap: 10px; margin-top: 20px; align-items: center; }
         .original-btn { display: inline-block; padding: 8px 18px; border: 1px solid #1a73e8; color: #1a73e8; text-decoration: none; border-radius: 6px; font-size: 13px; transition: all 0.3s; }
@@ -888,7 +909,7 @@ HTML_TEMPLATE = """
             const res = await fetch('/api/daily-articles');
             const data = await res.json();
             dailyNewsCache = (data.articles || []).map(a => ({
-                title: a.title, link: a.link, summary: a.summary,
+                title: a.title, title_eng: a.title_eng || '', link: a.link, summary: a.summary,
                 summary_eng: a.summary_eng || '', source: a.publisher
             }));
         } catch (e) { dailyNewsCache = []; }
@@ -1012,9 +1033,12 @@ HTML_TEMPLATE = """
                 '<div class="article-layout">' +
                     '<div class="article-body">' + escapeHtml(a.body) + '</div>' +
                     '<div class="summary-section' + (hasSummary ? ' visible' : '') + '" id="summary-' + i + '">' +
-                        '<h3>요약</h3>' +
+                        '<div class="summary-title">' + escapeHtml(a.title) + '</div>' +
                         '<div class="summary-content">' + (hasSummary ? escapeHtml(a.summary) : '') + '</div>' +
-                        (a.summary_eng ? '<div class="summary-eng-label">English Summary</div><div class="summary-content summary-eng">' + escapeHtml(a.summary_eng) + '</div>' : '<div class="summary-eng-content" id="summary-eng-' + i + '"></div>') +
+                    '</div>' +
+                    '<div class="summary-eng-section' + ((a.summary_eng || a.title_eng) ? '' : ' hidden') + '" id="summary-eng-section-' + i + '">' +
+                        '<div class="summary-title">' + escapeHtml(a.title_eng || '') + '</div>' +
+                        '<div class="summary-content">' + escapeHtml(a.summary_eng || '') + '</div>' +
                     '</div>' +
                 '</div>' +
                 '<div class="btn-row">' +
@@ -1065,9 +1089,12 @@ HTML_TEMPLATE = """
                 '<div class="article-layout">' +
                     '<div class="article-body">' + escapeHtml(a.body) + '</div>' +
                     '<div class="summary-section' + (hasSummary ? ' visible' : '') + '" id="summary-' + i + '">' +
-                        '<h3>요약</h3>' +
+                        '<div class="summary-title">' + escapeHtml(a.title) + '</div>' +
                         '<div class="summary-content">' + (hasSummary ? escapeHtml(a.summary) : '') + '</div>' +
-                        (a.summary_eng ? '<div class="summary-eng-label">English Summary</div><div class="summary-content summary-eng">' + escapeHtml(a.summary_eng) + '</div>' : '<div class="summary-eng-content" id="summary-eng-' + i + '"></div>') +
+                    '</div>' +
+                    '<div class="summary-eng-section' + ((a.summary_eng || a.title_eng) ? '' : ' hidden') + '" id="summary-eng-section-' + i + '">' +
+                        '<div class="summary-title">' + escapeHtml(a.title_eng || '') + '</div>' +
+                        '<div class="summary-content">' + escapeHtml(a.summary_eng || '') + '</div>' +
                     '</div>' +
                 '</div>' +
                 '<div class="btn-row">' +
@@ -1113,6 +1140,26 @@ HTML_TEMPLATE = """
 
         if (existingSummary && existingSummary !== 'AI가 요약하는 중입니다...' && existingSummary !== '요약 중 오류가 발생했습니다.') {
             btn.disabled = true;
+            // 영문 요약이 없으면 요약 실행
+            if (!article.summary_eng) {
+                btn.textContent = '영문 요약 중...';
+                try {
+                    const res = await fetch('/api/summarize', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ title: article.title, body: article.body, link: article.link, publisher: currentFeedName })
+                    });
+                    const data = await res.json();
+                    if (data.summary_eng) articles[idx].summary_eng = data.summary_eng;
+                    if (data.title_eng) articles[idx].title_eng = data.title_eng;
+                    var engSec = document.getElementById('summary-eng-section-' + idx);
+                    if (engSec && (data.summary_eng || data.title_eng)) {
+                        engSec.classList.remove('hidden');
+                        engSec.querySelector('.summary-title').textContent = data.title_eng || '';
+                        engSec.querySelector('.summary-content').textContent = data.summary_eng || '';
+                    }
+                } catch (e) {}
+            }
             btn.textContent = '선택 중...';
             try {
                 await fetch('/api/toggle-daily', {
@@ -1147,6 +1194,15 @@ HTML_TEMPLATE = """
             const data = await res.json();
             contentDiv.textContent = data.summary;
             articles[idx].summary = data.summary;
+            if (data.summary_eng) articles[idx].summary_eng = data.summary_eng;
+            if (data.title_eng) articles[idx].title_eng = data.title_eng;
+            // 영문 요약 영역 표시
+            var engSec2 = document.getElementById('summary-eng-section-' + idx);
+            if (engSec2 && (data.summary_eng || data.title_eng)) {
+                engSec2.classList.remove('hidden');
+                engSec2.querySelector('.summary-title').textContent = data.title_eng || '';
+                engSec2.querySelector('.summary-content').textContent = data.summary_eng || '';
+            }
 
             // is_daily = true로 설정
             await fetch('/api/toggle-daily', {
@@ -1194,13 +1250,14 @@ HTML_TEMPLATE = """
             btn.textContent = '요약 완료';
             // 로컬 articles 배열도 업데이트
             articles[idx].summary = data.summary;
-            if (data.summary_eng) {
-                articles[idx].summary_eng = data.summary_eng;
-                // 영문 요약 표시
-                var engContainer = document.getElementById('summary-eng-' + idx);
-                if (engContainer) {
-                    engContainer.outerHTML = '<div class="summary-eng-label">English Summary</div><div class="summary-content summary-eng">' + escapeHtml(data.summary_eng) + '</div>';
-                }
+            if (data.summary_eng) articles[idx].summary_eng = data.summary_eng;
+            if (data.title_eng) articles[idx].title_eng = data.title_eng;
+            // 영문 요약 영역 표시
+            var engSection = document.getElementById('summary-eng-section-' + idx);
+            if (engSection && (data.summary_eng || data.title_eng)) {
+                engSection.classList.remove('hidden');
+                engSection.querySelector('.summary-title').textContent = data.title_eng || '';
+                engSection.querySelector('.summary-content').textContent = data.summary_eng || '';
             }
         } catch (e) {
             contentDiv.textContent = '요약 중 오류가 발생했습니다.';
@@ -1273,7 +1330,7 @@ HTML_TEMPLATE = """
                 '<h3><span class="daily-order">' + (i + 1) + '</span><a href="' + escapeHtml(item.link) + '" target="_blank">' + escapeHtml(item.title) + '</a></h3>' +
                 (item.source ? '<span class="daily-source">' + escapeHtml(item.source) + '</span>' : '') +
                 '<div class="daily-summary">' + escapeHtml(cleanSummary) + '</div>' +
-                (cleanSummaryEng ? '<div class="summary-eng-label" style="margin-top:8px;font-size:13px;color:#e67e22;font-weight:bold;">English Summary</div><div class="daily-summary summary-eng">' + escapeHtml(cleanSummaryEng) + '</div>' : '') +
+                (cleanSummaryEng ? '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #ddd;"><div style="font-weight:bold;margin-bottom:4px;">' + escapeHtml(item.title_eng || '') + '</div><div class="daily-summary">' + escapeHtml(cleanSummaryEng) + '</div></div>' : '') +
             '</div>';
         }).join('');
 
@@ -1530,35 +1587,29 @@ def generate_ppt(articles):
         slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank
         left = Inches(0.5)
         width = Inches(12.3)
-
-        # 제목 영역
-        title_box = slide.shapes.add_textbox(left, Inches(0.3), width, Inches(0.8))
-        tf_title = title_box.text_frame
-        tf_title.word_wrap = True
-        p_title = tf_title.paragraphs[0]
-        p_title.text = article["title"]
-        p_title.font.size = Pt(18)
-        p_title.font.bold = True
-        p_title.font.color.rgb = RGBColor(0, 51, 153)
-        p_title.font.underline = True
+        bg_color = RGBColor(230, 230, 230)
+        font_color = RGBColor(0, 0, 0)
+        title_color = RGBColor(0, 51, 153)
 
         # 한국어 요약 영역 (위쪽)
-        ko_top = Inches(1.3)
-        ko_height = Inches(2.8)
+        ko_top = Inches(0.3)
+        ko_height = Inches(3.3)
         bg_ko = slide.shapes.add_shape(1, left, ko_top, width, ko_height)
         bg_ko.fill.solid()
-        bg_ko.fill.fore_color.rgb = RGBColor(230, 230, 230)
+        bg_ko.fill.fore_color.rgb = bg_color
         bg_ko.line.fill.background()
 
         ko_box = slide.shapes.add_textbox(left + Inches(0.3), ko_top + Inches(0.2), width - Inches(0.6), ko_height - Inches(0.4))
         tf_ko = ko_box.text_frame
         tf_ko.word_wrap = True
-        p_ko_label = tf_ko.paragraphs[0]
-        p_ko_label.text = "한국어 요약"
-        p_ko_label.font.size = Pt(14)
-        p_ko_label.font.bold = True
-        p_ko_label.font.color.rgb = RGBColor(230, 126, 34)
-        p_ko_label.space_after = Pt(8)
+
+        # 한국어 제목
+        p_ko_title = tf_ko.paragraphs[0]
+        p_ko_title.text = article.get("title", "")
+        p_ko_title.font.size = Pt(18)
+        p_ko_title.font.bold = True
+        p_ko_title.font.color.rgb = title_color
+        p_ko_title.space_after = Pt(12)
 
         summary_text = article.get("summary") or "요약 없음"
         summary_lines = [l.strip() for l in summary_text.split('\n') if l.strip().startswith('.')]
@@ -1568,27 +1619,29 @@ def generate_ppt(articles):
             p_sum = tf_ko.add_paragraph()
             p_sum.text = line
             p_sum.font.size = Pt(13)
-            p_sum.font.color.rgb = RGBColor(0, 0, 0)
+            p_sum.font.color.rgb = font_color
             p_sum.line_spacing = Pt(20)
             p_sum.space_before = Pt(2)
 
-        # 영문 요약 영역 (아래쪽)
-        en_top = Inches(4.3)
-        en_height = Inches(2.8)
+        # 영문 요약 영역 (아래쪽) - 동일한 배경색과 폰트
+        en_top = Inches(3.9)
+        en_height = Inches(3.3)
         bg_en = slide.shapes.add_shape(1, left, en_top, width, en_height)
         bg_en.fill.solid()
-        bg_en.fill.fore_color.rgb = RGBColor(220, 230, 245)
+        bg_en.fill.fore_color.rgb = bg_color
         bg_en.line.fill.background()
 
         en_box = slide.shapes.add_textbox(left + Inches(0.3), en_top + Inches(0.2), width - Inches(0.6), en_height - Inches(0.4))
         tf_en = en_box.text_frame
         tf_en.word_wrap = True
-        p_en_label = tf_en.paragraphs[0]
-        p_en_label.text = "English Summary"
-        p_en_label.font.size = Pt(14)
-        p_en_label.font.bold = True
-        p_en_label.font.color.rgb = RGBColor(41, 128, 185)
-        p_en_label.space_after = Pt(8)
+
+        # 영문 제목
+        p_en_title = tf_en.paragraphs[0]
+        p_en_title.text = article.get("title_eng", "") or article.get("title", "")
+        p_en_title.font.size = Pt(18)
+        p_en_title.font.bold = True
+        p_en_title.font.color.rgb = title_color
+        p_en_title.space_after = Pt(12)
 
         summary_eng = article.get("summary_eng") or "No English summary"
         eng_lines = [l.strip() for l in summary_eng.split('\n') if l.strip().startswith('.')]
@@ -1598,7 +1651,7 @@ def generate_ppt(articles):
             p_eng = tf_en.add_paragraph()
             p_eng.text = line
             p_eng.font.size = Pt(13)
-            p_eng.font.color.rgb = RGBColor(44, 62, 80)
+            p_eng.font.color.rgb = font_color
             p_eng.line_spacing = Pt(20)
             p_eng.space_before = Pt(2)
 
@@ -1655,18 +1708,19 @@ async def api_summarize(request: Request):
     link = data.get("link", "")
     publisher = data.get("publisher", "")
     # 한국어/영어 요약 동시 실행
-    summary, summary_eng = await asyncio.gather(
+    summary, eng_result = await asyncio.gather(
         summarize_article(title, body),
         summarize_article_eng(title, body),
     )
+    summary_eng, title_eng = eng_result
     # DB 업데이트
     if summary and link:
-        updated = update_article_summary(link, summary, summary_eng)
+        updated = update_article_summary(link, summary, summary_eng, title_eng)
         if not updated:
             save_articles_to_db([{"title": title, "body": body, "link": link, "summary": summary}], publisher=publisher)
             if summary_eng:
-                update_article_summary(link, summary, summary_eng)
-    return JSONResponse({"summary": summary, "summary_eng": summary_eng})
+                update_article_summary(link, summary, summary_eng, title_eng)
+    return JSONResponse({"summary": summary, "summary_eng": summary_eng, "title_eng": title_eng})
 
 
 @app.post("/api/toggle-daily")
