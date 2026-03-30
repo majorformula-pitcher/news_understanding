@@ -656,6 +656,8 @@ HTML_TEMPLATE = """
         .summary-section.visible { display: block; }
         .summary-section h3 { margin-top: 0; color: #e67e22; font-size: 18px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #ffe066; padding-bottom: 10px; }
         .summary-content { font-size: 16px; color: #2c3e50; font-weight: 600; line-height: 1.6; white-space: pre-wrap; }
+        .summary-eng-label { font-size: 14px; color: #e67e22; font-weight: bold; margin-top: 12px; padding-top: 10px; border-top: 1px solid #ffe066; }
+        .summary-eng { color: #34495e; }
 
         .btn-row { display: flex; gap: 10px; margin-top: 20px; align-items: center; }
         .original-btn { display: inline-block; padding: 8px 18px; border: 1px solid #1a73e8; color: #1a73e8; text-decoration: none; border-radius: 6px; font-size: 13px; transition: all 0.3s; }
@@ -1012,6 +1014,7 @@ HTML_TEMPLATE = """
                     '<div class="summary-section' + (hasSummary ? ' visible' : '') + '" id="summary-' + i + '">' +
                         '<h3>요약</h3>' +
                         '<div class="summary-content">' + (hasSummary ? escapeHtml(a.summary) : '') + '</div>' +
+                        (a.summary_eng ? '<div class="summary-eng-label">English Summary</div><div class="summary-content summary-eng">' + escapeHtml(a.summary_eng) + '</div>' : '<div class="summary-eng-content" id="summary-eng-' + i + '"></div>') +
                     '</div>' +
                 '</div>' +
                 '<div class="btn-row">' +
@@ -1064,6 +1067,7 @@ HTML_TEMPLATE = """
                     '<div class="summary-section' + (hasSummary ? ' visible' : '') + '" id="summary-' + i + '">' +
                         '<h3>요약</h3>' +
                         '<div class="summary-content">' + (hasSummary ? escapeHtml(a.summary) : '') + '</div>' +
+                        (a.summary_eng ? '<div class="summary-eng-label">English Summary</div><div class="summary-content summary-eng">' + escapeHtml(a.summary_eng) + '</div>' : '<div class="summary-eng-content" id="summary-eng-' + i + '"></div>') +
                     '</div>' +
                 '</div>' +
                 '<div class="btn-row">' +
@@ -1190,7 +1194,14 @@ HTML_TEMPLATE = """
             btn.textContent = '요약 완료';
             // 로컬 articles 배열도 업데이트
             articles[idx].summary = data.summary;
-            if (data.summary_eng) articles[idx].summary_eng = data.summary_eng;
+            if (data.summary_eng) {
+                articles[idx].summary_eng = data.summary_eng;
+                // 영문 요약 표시
+                var engContainer = document.getElementById('summary-eng-' + idx);
+                if (engContainer) {
+                    engContainer.outerHTML = '<div class="summary-eng-label">English Summary</div><div class="summary-content summary-eng">' + escapeHtml(data.summary_eng) + '</div>';
+                }
+            }
         } catch (e) {
             contentDiv.textContent = '요약 중 오류가 발생했습니다.';
             btn.textContent = '요약하기';
@@ -1252,11 +1263,17 @@ HTML_TEMPLATE = """
                 return trimmed.startsWith('.');
             });
             var cleanSummary = summaryLines.length > 0 ? summaryLines.join('\\n') : item.summary;
+            var engLines = (item.summary_eng || '').split('\\n').filter(function(line) {
+                var trimmed = line.trim();
+                return trimmed.startsWith('.');
+            });
+            var cleanSummaryEng = engLines.length > 0 ? engLines.join('\\n') : (item.summary_eng || '');
             return '<div class="daily-item" draggable="true" data-index="' + i + '">' +
                 '<button class="daily-remove" onclick="removeDaily(' + i + ')">×</button>' +
                 '<h3><span class="daily-order">' + (i + 1) + '</span><a href="' + escapeHtml(item.link) + '" target="_blank">' + escapeHtml(item.title) + '</a></h3>' +
                 (item.source ? '<span class="daily-source">' + escapeHtml(item.source) + '</span>' : '') +
                 '<div class="daily-summary">' + escapeHtml(cleanSummary) + '</div>' +
+                (cleanSummaryEng ? '<div class="summary-eng-label" style="margin-top:8px;font-size:13px;color:#e67e22;font-weight:bold;">English Summary</div><div class="daily-summary summary-eng">' + escapeHtml(cleanSummaryEng) + '</div>' : '') +
             '</div>';
         }).join('');
 
@@ -1508,53 +1525,82 @@ def generate_ppt(articles):
     p2.font.color.rgb = RGBColor(100, 100, 100)
     p2.alignment = PP_ALIGN.CENTER
 
-    # 기사 2개씩 슬라이드에 배치 (위/아래 세로 배치, 가로로 넓게)
-    for i in range(0, len(articles), 2):
+    # 기사 1개씩 슬라이드에 배치 (위: 한국어 요약, 아래: 영문 요약)
+    for article in articles:
         slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank
+        left = Inches(0.5)
+        width = Inches(12.3)
 
-        pair = articles[i:i+2]
+        # 제목 영역
+        title_box = slide.shapes.add_textbox(left, Inches(0.3), width, Inches(0.8))
+        tf_title = title_box.text_frame
+        tf_title.word_wrap = True
+        p_title = tf_title.paragraphs[0]
+        p_title.text = article["title"]
+        p_title.font.size = Pt(18)
+        p_title.font.bold = True
+        p_title.font.color.rgb = RGBColor(0, 51, 153)
+        p_title.font.underline = True
 
-        for j, article in enumerate(pair):
-            left = Inches(0.5)
-            width = Inches(12.3)
-            # 위쪽 기사: y=0.3, 아래쪽 기사: y=3.9
-            top_offset = Inches(0.3) if j == 0 else Inches(3.9)
-            box_height = Inches(3.3)
+        # 한국어 요약 영역 (위쪽)
+        ko_top = Inches(1.3)
+        ko_height = Inches(2.8)
+        bg_ko = slide.shapes.add_shape(1, left, ko_top, width, ko_height)
+        bg_ko.fill.solid()
+        bg_ko.fill.fore_color.rgb = RGBColor(230, 230, 230)
+        bg_ko.line.fill.background()
 
-            # 회색 배경 사각형 (기사 영역만)
-            bg_shape = slide.shapes.add_shape(
-                1, left, top_offset, width, box_height
-            )
-            bg_shape.fill.solid()
-            bg_shape.fill.fore_color.rgb = RGBColor(230, 230, 230)
-            bg_shape.line.fill.background()  # 테두리 없음
+        ko_box = slide.shapes.add_textbox(left + Inches(0.3), ko_top + Inches(0.2), width - Inches(0.6), ko_height - Inches(0.4))
+        tf_ko = ko_box.text_frame
+        tf_ko.word_wrap = True
+        p_ko_label = tf_ko.paragraphs[0]
+        p_ko_label.text = "한국어 요약"
+        p_ko_label.font.size = Pt(14)
+        p_ko_label.font.bold = True
+        p_ko_label.font.color.rgb = RGBColor(230, 126, 34)
+        p_ko_label.space_after = Pt(8)
 
-            # 제목 + 요약을 하나의 텍스트박스에
-            content_box = slide.shapes.add_textbox(left + Inches(0.3), top_offset + Inches(0.2), width - Inches(0.6), box_height - Inches(0.4))
-            tf_content = content_box.text_frame
-            tf_content.word_wrap = True
+        summary_text = article.get("summary") or "요약 없음"
+        summary_lines = [l.strip() for l in summary_text.split('\n') if l.strip().startswith('.')]
+        if not summary_lines:
+            summary_lines = [l.strip() for l in summary_text.split('\n') if l.strip()]
+        for line in summary_lines:
+            p_sum = tf_ko.add_paragraph()
+            p_sum.text = line
+            p_sum.font.size = Pt(13)
+            p_sum.font.color.rgb = RGBColor(0, 0, 0)
+            p_sum.line_spacing = Pt(20)
+            p_sum.space_before = Pt(2)
 
-            # 제목 (진한 파란 글씨 + 밑줄)
-            p_title = tf_content.paragraphs[0]
-            p_title.text = article["title"]
-            p_title.font.size = Pt(18)
-            p_title.font.bold = True
-            p_title.font.color.rgb = RGBColor(0, 51, 153)
-            p_title.font.underline = True
-            p_title.space_after = Pt(12)
+        # 영문 요약 영역 (아래쪽)
+        en_top = Inches(4.3)
+        en_height = Inches(2.8)
+        bg_en = slide.shapes.add_shape(1, left, en_top, width, en_height)
+        bg_en.fill.solid()
+        bg_en.fill.fore_color.rgb = RGBColor(220, 230, 245)
+        bg_en.line.fill.background()
 
-            # 요약 내용을 줄별로 추가 (제목 줄 제거, . 으로 시작하는 줄만)
-            summary_text = article.get("summary") or "요약 없음"
-            summary_lines = [l.strip() for l in summary_text.split('\n') if l.strip().startswith('.')]
-            if not summary_lines:
-                summary_lines = [l.strip() for l in summary_text.split('\n') if l.strip()]
-            for line in summary_lines:
-                p_sum = tf_content.add_paragraph()
-                p_sum.text = line
-                p_sum.font.size = Pt(13)
-                p_sum.font.color.rgb = RGBColor(0, 0, 0)
-                p_sum.line_spacing = Pt(20)
-                p_sum.space_before = Pt(2)
+        en_box = slide.shapes.add_textbox(left + Inches(0.3), en_top + Inches(0.2), width - Inches(0.6), en_height - Inches(0.4))
+        tf_en = en_box.text_frame
+        tf_en.word_wrap = True
+        p_en_label = tf_en.paragraphs[0]
+        p_en_label.text = "English Summary"
+        p_en_label.font.size = Pt(14)
+        p_en_label.font.bold = True
+        p_en_label.font.color.rgb = RGBColor(41, 128, 185)
+        p_en_label.space_after = Pt(8)
+
+        summary_eng = article.get("summary_eng") or "No English summary"
+        eng_lines = [l.strip() for l in summary_eng.split('\n') if l.strip().startswith('.')]
+        if not eng_lines:
+            eng_lines = [l.strip() for l in summary_eng.split('\n') if l.strip()]
+        for line in eng_lines:
+            p_eng = tf_en.add_paragraph()
+            p_eng.text = line
+            p_eng.font.size = Pt(13)
+            p_eng.font.color.rgb = RGBColor(44, 62, 80)
+            p_eng.line_spacing = Pt(20)
+            p_eng.space_before = Pt(2)
 
     output = io.BytesIO()
     prs.save(output)
