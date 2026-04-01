@@ -165,7 +165,7 @@ def load_articles_by_publisher(publisher):
         return []
 
 
-def update_article_summary(url, summary, summary_eng="", title_eng=""):
+def update_article_summary(url, summary, summary_eng="", title_eng="", title_ko=""):
     """기사 URL로 summary 컬럼 업데이트"""
     if not supabase:
         return False
@@ -175,6 +175,8 @@ def update_article_summary(url, summary, summary_eng="", title_eng=""):
             data["summary_eng"] = summary_eng
         if title_eng:
             data["title_eng"] = title_eng
+        if title_ko:
+            data["title"] = title_ko
         supabase.table("news-understanding").update(
             data
         ).eq("url", url).execute()
@@ -297,22 +299,22 @@ async def summarize_article_eng(title, body):
         return "", ""
 
     if not body or body == "Content not found" or len(body) < 100:
-        return "", ""
+        return "", "", ""
 
     is_english = _is_english_text(title)
 
     if is_english:
-        # 영문 원본: 제목은 그대로, 요약만 요청
-        prompt = f"""Read the following news article and summarize it in English.
+        # 영문 원본: 제목 한글 번역 + 영문 요약
+        prompt = f"""Read the following news article and provide:
+1. A Korean translation of the article title (one line)
+2. A summary in English (exactly 2 lines, each starting with '. ')
 
-Your output must be EXACTLY 2 lines. Each line must start with '. ' (dot space).
+Your output must be EXACTLY 3 lines in this format:
+TITLE_KO: <Korean title here>
+. <first key point>
+. <second key point>
 
-Example output:
-. Company X announced a new product targeting enterprise customers.
-. The move comes as competition intensifies in the cloud computing market.
-
-Do NOT include the article title, any headers, or any other text.
-Do NOT use markdown syntax.
+Do NOT include any other text, headers, or markdown syntax.
 
 Article title: {title}
 Article body: {body}"""
@@ -350,7 +352,17 @@ Article body: {body}"""
         text = text.strip()
 
         if is_english:
-            return text, title  # 영문 원본이면 제목 그대로 반환
+            # 영문 원본: TITLE_KO 줄 분리
+            title_ko = ""
+            summary_lines = []
+            for line in text.split('\n'):
+                stripped = line.strip()
+                if stripped.upper().startswith('TITLE_KO:'):
+                    title_ko = stripped[9:].strip()
+                elif stripped:
+                    summary_lines.append(stripped)
+            summary_eng = '\n'.join(summary_lines)
+            return summary_eng, title, title_ko  # (영문요약, 영문제목, 한글제목)
 
         # 한글 원본: TITLE: 줄 분리
         title_eng = ""
@@ -362,10 +374,10 @@ Article body: {body}"""
             elif stripped:
                 summary_lines.append(stripped)
         summary_eng = '\n'.join(summary_lines)
-        return summary_eng, title_eng
+        return summary_eng, title_eng, ""
     except Exception as e:
         print(f"영문 요약 오류: {e}")
-        return "", ""
+        return "", "", ""
 
 
 async def get_news_content(url):
@@ -1222,6 +1234,7 @@ HTML_TEMPLATE = """
                     const data = await res.json();
                     if (data.summary_eng) articles[idx].summary_eng = data.summary_eng;
                     if (data.title_eng) articles[idx].title_eng = data.title_eng;
+                    if (data.title_ko) { articles[idx].title = data.title_ko; var h2 = document.querySelector('#result-' + idx + ' h2'); if (h2) h2.textContent = data.title_ko; }
                     var engSec = document.getElementById('summary-eng-section-' + idx);
                     if (engSec && (data.summary_eng || data.title_eng)) {
                         engSec.classList.remove('hidden');
@@ -1266,6 +1279,7 @@ HTML_TEMPLATE = """
             articles[idx].summary = data.summary;
             if (data.summary_eng) articles[idx].summary_eng = data.summary_eng;
             if (data.title_eng) articles[idx].title_eng = data.title_eng;
+            if (data.title_ko) { articles[idx].title = data.title_ko; var h2b = document.querySelector('#result-' + idx + ' h2'); if (h2b) h2b.textContent = data.title_ko; }
             // 영문 요약 영역 표시
             var engSec2 = document.getElementById('summary-eng-section-' + idx);
             if (engSec2 && (data.summary_eng || data.title_eng)) {
@@ -1322,6 +1336,7 @@ HTML_TEMPLATE = """
             articles[idx].summary = data.summary;
             if (data.summary_eng) articles[idx].summary_eng = data.summary_eng;
             if (data.title_eng) articles[idx].title_eng = data.title_eng;
+            if (data.title_ko) { articles[idx].title = data.title_ko; var h2c = document.querySelector('#result-' + idx + ' h2'); if (h2c) h2c.textContent = data.title_ko; }
             // 영문 요약 영역 표시
             var engSection = document.getElementById('summary-eng-section-' + idx);
             if (engSection && (data.summary_eng || data.title_eng)) {
@@ -1787,7 +1802,14 @@ def generate_ppt(articles):
             img_top = TABLE_TOP + TITLE_ROW_HEIGHT + (BODY_ROW_HEIGHT - IMG_SIZE) // 2
             slide.shapes.add_picture(image_data, img_left, img_top, IMG_SIZE, IMG_SIZE)
 
-        # 표 테두리 투명 처리
+        # 표 테두리 완전 제거
+        tbl = table._tbl
+        tblPr = tbl.tblPr
+        # 테이블 전체 스타일에서 테두리 제거
+        for child in list(tblPr):
+            if 'bandRow' not in child.tag and 'bandCol' not in child.tag:
+                pass  # 유지
+        # 개별 셀 테두리 제거
         for row_idx in range(len(table.rows)):
             for col_idx in range(cols):
                 cell = table.cell(row_idx, col_idx)
@@ -1797,10 +1819,15 @@ def generate_ppt(articles):
                     border = tcPr.find(qn(border_name))
                     if border is not None:
                         tcPr.remove(border)
-                    border = tcPr.makeelement(qn(border_name), {'w': '0'})
-                    noFill = border.makeelement(qn('a:noFill'), {})
-                    border.append(noFill)
-                    tcPr.append(border)
+                    # 폭 0, prstDash=solid, noFill 조합으로 완전히 숨김
+                    ln = tcPr.makeelement(qn(border_name), {'w': '0', 'algn': 'ctr'})
+                    ln.append(ln.makeelement(qn('a:noFill'), {}))
+                    ln.append(ln.makeelement(qn('a:prstDash'), {'val': 'solid'}))
+                    tcPr.append(ln)
+        # tblStyle 제거 (기본 테마 테두리 방지)
+        tblStyleId = tblPr.find(qn('a:tblStyleId'))
+        if tblStyleId is not None:
+            tblPr.remove(tblStyleId)
 
         # URL을 슬라이드 노트에 추가
         if article_url:
@@ -1879,15 +1906,15 @@ async def api_summarize(request: Request):
         summarize_article(title, body),
         summarize_article_eng(title, body),
     )
-    summary_eng, title_eng = eng_result
+    summary_eng, title_eng, title_ko = eng_result
     # DB 업데이트
     if summary and link:
-        updated = update_article_summary(link, summary, summary_eng, title_eng)
+        updated = update_article_summary(link, summary, summary_eng, title_eng, title_ko)
         if not updated:
             save_articles_to_db([{"title": title, "body": body, "link": link, "summary": summary}], publisher=publisher)
             if summary_eng:
-                update_article_summary(link, summary, summary_eng, title_eng)
-    return JSONResponse({"summary": summary, "summary_eng": summary_eng, "title_eng": title_eng})
+                update_article_summary(link, summary, summary_eng, title_eng, title_ko)
+    return JSONResponse({"summary": summary, "summary_eng": summary_eng, "title_eng": title_eng, "title_ko": title_ko})
 
 
 @app.post("/api/toggle-daily")
@@ -1952,10 +1979,12 @@ async def daily_ppt(request: Request):
     if not articles:
         return JSONResponse({"error": "선택된 기사가 없습니다."}, status_code=400)
     output = generate_ppt(articles)
+    from datetime import datetime
+    filename = f"daily_news_{datetime.now().strftime('%Y%m%d')}.pptx"
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        headers={"Content-Disposition": "attachment; filename=daily_news.pptx"},
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 
 
