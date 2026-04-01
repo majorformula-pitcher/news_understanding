@@ -1770,10 +1770,10 @@ def generate_ppt(articles):
                 p = summary_cell.text_frame.add_paragraph()
             p.text = _to_bullet(line)
             p.font.name = FONT_NAME
-            p.font.size = Pt(13)
+            p.font.size = Pt(18)
             p.font.color.rgb = font_color
-            p.line_spacing = Pt(20)
-            p.space_before = Pt(2)
+            p.line_spacing = Pt(28)
+            p.space_before = Pt(4)
 
         # Row 1, Col 1: 이미지 셀 (이미지를 셀 위에 겹쳐서 배치)
         if has_image:
@@ -1787,7 +1787,7 @@ def generate_ppt(articles):
             img_top = TABLE_TOP + TITLE_ROW_HEIGHT + (BODY_ROW_HEIGHT - IMG_SIZE) // 2
             slide.shapes.add_picture(image_data, img_left, img_top, IMG_SIZE, IMG_SIZE)
 
-        # 표 테두리 제거
+        # 표 테두리 투명 처리
         for row_idx in range(len(table.rows)):
             for col_idx in range(cols):
                 cell = table.cell(row_idx, col_idx)
@@ -1795,15 +1795,16 @@ def generate_ppt(articles):
                 tcPr = tc.get_or_add_tcPr()
                 for border_name in ['a:lnL', 'a:lnR', 'a:lnT', 'a:lnB']:
                     border = tcPr.find(qn(border_name))
-                    if border is None:
-                        border = tcPr.makeelement(qn(border_name), {})
-                        tcPr.append(border)
-                    border.set('w', '0')
-                    noFill = border.makeelement(qn('a:noFill'), {})
-                    # 기존 fill 제거 후 noFill 추가
-                    for child in list(border):
-                        border.remove(child)
-                    border.append(noFill)
+                    if border is not None:
+                        tcPr.remove(border)
+                    border = tcPr.makeelement(qn(border_name), {'w': '12700', 'cap': 'flat', 'cmpd': 'sng'})
+                    solidFill = border.makeelement(qn('a:solidFill'), {})
+                    srgbClr = solidFill.makeelement(qn('a:srgbClr'), {'val': 'E6E6E6'})
+                    alpha = srgbClr.makeelement(qn('a:alpha'), {'val': '0'})
+                    srgbClr.append(alpha)
+                    solidFill.append(srgbClr)
+                    border.append(solidFill)
+                    tcPr.append(border)
 
         # URL을 슬라이드 노트에 추가
         if article_url:
