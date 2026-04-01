@@ -1617,7 +1617,7 @@ HTML_TEMPLATE = """
 """
 
 def generate_ppt(articles):
-    """뉴스 요약을 PPT로 생성 (슬라이드 1장당 2개 기사)"""
+    """뉴스 요약을 PPT로 생성 (슬라이드 1장당 1개 기사: 한글+영문)"""
     prs = Presentation()
     prs.slide_width = Inches(13.333)
     prs.slide_height = Inches(7.5)
@@ -1642,6 +1642,14 @@ def generate_ppt(articles):
     p2.font.size = Pt(24)
     p2.font.color.rgb = RGBColor(100, 100, 100)
     p2.alignment = PP_ALIGN.CENTER
+
+    def _to_bullet(line):
+        """선행 . 을 • 글머리 기호로 변환"""
+        if line.startswith('. '):
+            return '• ' + line[2:]
+        if line.startswith('.'):
+            return '•' + line[1:]
+        return line
 
     # 기사 1개씩 슬라이드에 배치 (위: 한국어 요약, 아래: 영문 요약)
     for article in articles:
@@ -1677,12 +1685,10 @@ def generate_ppt(articles):
         p_ko_title.space_after = Pt(12)
 
         summary_text = article.get("summary") or "요약 없음"
-        summary_lines = [l.strip() for l in summary_text.split('\n') if l.strip().startswith('.')]
-        if not summary_lines:
-            summary_lines = [l.strip() for l in summary_text.split('\n') if l.strip()]
+        summary_lines = [l.strip() for l in summary_text.split('\n') if l.strip()]
         for line in summary_lines:
             p_sum = tf_ko.add_paragraph()
-            p_sum.text = '•' + line[1:] if line.startswith('.') else line
+            p_sum.text = _to_bullet(line)
             p_sum.font.name = FONT_NAME
             p_sum.font.size = Pt(13)
             p_sum.font.color.rgb = font_color
@@ -1728,12 +1734,10 @@ def generate_ppt(articles):
         p_en_title.space_after = Pt(12)
 
         summary_eng = article.get("summary_eng") or "No English summary"
-        eng_lines = [l.strip() for l in summary_eng.split('\n') if l.strip().startswith('.')]
-        if not eng_lines:
-            eng_lines = [l.strip() for l in summary_eng.split('\n') if l.strip()]
+        eng_lines = [l.strip() for l in summary_eng.split('\n') if l.strip()]
         for line in eng_lines:
             p_eng = tf_en.add_paragraph()
-            p_eng.text = '•' + line[1:] if line.startswith('.') else line
+            p_eng.text = _to_bullet(line)
             p_eng.font.name = FONT_NAME
             p_eng.font.size = Pt(13)
             p_eng.font.color.rgb = font_color
