@@ -1691,8 +1691,8 @@ def generate_ppt(articles):
     IMG_SIZE = Cm(5)  # 5cm x 5cm
     TEXT_WIDTH = Inches(12.3) - IMG_SIZE - Inches(0.3)  # 텍스트 영역 (이미지 공간 확보)
 
-    # 기사 1개씩 슬라이드에 배치 (위: 한국어 요약, 아래: 영문 요약)
-    for article in articles:
+    def _add_summary_slide(prs, title_text, summary_text, article_url, image_data, is_english=False):
+        """요약 슬라이드 1장 생성. URL은 슬라이드 노트에 추가."""
         slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank
         left = Inches(0.5)
         full_width = Inches(12.3)
@@ -1700,122 +1700,67 @@ def generate_ppt(articles):
         font_color = RGBColor(0, 0, 0)
         title_color = RGBColor(0, 51, 153)
 
-        article_url = article.get("link", "")
-        url_color = RGBColor(100, 100, 100)
-
-        # 기사 URL에서 og:image 추출 및 다운로드
-        image_data = _fetch_og_image(article.get("link", ""))
         has_image = image_data is not None
         text_width = TEXT_WIDTH if has_image else full_width
 
-        # 한국어 요약 영역 (위쪽)
-        ko_top = Inches(0.3)
-        ko_height = Inches(2.8)
-        bg_ko = slide.shapes.add_shape(1, left, ko_top, full_width, ko_height)
-        bg_ko.fill.solid()
-        bg_ko.fill.fore_color.rgb = bg_color
-        bg_ko.line.fill.background()
+        # 요약 영역 (슬라이드 중앙에 크게 배치)
+        box_top = Inches(0.3)
+        box_height = Inches(6.5)
+        bg_shape = slide.shapes.add_shape(1, left, box_top, full_width, box_height)
+        bg_shape.fill.solid()
+        bg_shape.fill.fore_color.rgb = bg_color
+        bg_shape.line.fill.background()
 
-        ko_box = slide.shapes.add_textbox(left + Inches(0.3), ko_top + Inches(0.2), text_width - Inches(0.6), ko_height - Inches(0.4))
-        tf_ko = ko_box.text_frame
-        tf_ko.word_wrap = True
+        text_box = slide.shapes.add_textbox(left + Inches(0.3), box_top + Inches(0.2), text_width - Inches(0.6), box_height - Inches(0.4))
+        tf = text_box.text_frame
+        tf.word_wrap = True
 
-        # 한국어 제목
-        p_ko_title = tf_ko.paragraphs[0]
-        p_ko_title.text = article.get("title", "")
-        p_ko_title.font.name = FONT_NAME
-        p_ko_title.font.size = Pt(18)
-        p_ko_title.font.bold = True
-        p_ko_title.font.color.rgb = title_color
-        p_ko_title.space_after = Pt(12)
+        # 제목
+        p_title = tf.paragraphs[0]
+        p_title.text = title_text
+        p_title.font.name = FONT_NAME
+        p_title.font.size = Pt(18)
+        p_title.font.bold = True
+        p_title.font.color.rgb = title_color
+        p_title.space_after = Pt(12)
 
-        summary_text = article.get("summary") or "요약 없음"
-        summary_lines = [l.strip() for l in summary_text.split('\n') if l.strip()]
-        for line in summary_lines:
-            p_sum = tf_ko.add_paragraph()
-            p_sum.text = _to_bullet(line)
-            p_sum.font.name = FONT_NAME
-            p_sum.font.size = Pt(13)
-            p_sum.font.color.rgb = font_color
-            p_sum.line_spacing = Pt(20)
-            p_sum.space_before = Pt(2)
+        # 요약 본문
+        lines = [l.strip() for l in summary_text.split('\n') if l.strip()]
+        for line in lines:
+            p = tf.add_paragraph()
+            p.text = _to_bullet(line)
+            p.font.name = FONT_NAME
+            p.font.size = Pt(13)
+            p.font.color.rgb = font_color
+            p.line_spacing = Pt(20)
+            p.space_before = Pt(2)
 
-        # 한국어 영역 오른쪽에 이미지 배치
-        if has_image:
-            img_left = left + text_width + Inches(0.15)
-            img_top = ko_top + (ko_height - IMG_SIZE) // 2  # 세로 중앙
-            slide.shapes.add_picture(image_data, img_left, img_top, IMG_SIZE, IMG_SIZE)
-
-        # URL 박스 (한국어 요약 아래, 흰색 배경)
-        if article_url:
-            url_top_ko = ko_top + ko_height + Inches(0.05)
-            url_height = Inches(0.3)
-            url_bg_ko = slide.shapes.add_shape(1, left, url_top_ko, full_width, url_height)
-            url_bg_ko.fill.solid()
-            url_bg_ko.fill.fore_color.rgb = RGBColor(255, 255, 255)
-            url_bg_ko.line.fill.background()
-            url_box_ko = slide.shapes.add_textbox(left + Inches(0.3), url_top_ko + Inches(0.05), full_width - Inches(0.6), url_height - Inches(0.1))
-            tf_url_ko = url_box_ko.text_frame
-            tf_url_ko.word_wrap = True
-            p_url_ko = tf_url_ko.paragraphs[0]
-            p_url_ko.text = article_url
-            p_url_ko.font.name = FONT_NAME
-            p_url_ko.font.size = Pt(9)
-            p_url_ko.font.color.rgb = url_color
-
-        # 영문 요약 영역 (아래쪽) - 동일한 배경색과 폰트
-        en_top = Inches(3.75)
-        en_height = Inches(2.8)
-        bg_en = slide.shapes.add_shape(1, left, en_top, full_width, en_height)
-        bg_en.fill.solid()
-        bg_en.fill.fore_color.rgb = bg_color
-        bg_en.line.fill.background()
-
-        en_box = slide.shapes.add_textbox(left + Inches(0.3), en_top + Inches(0.2), text_width - Inches(0.6), en_height - Inches(0.4))
-        tf_en = en_box.text_frame
-        tf_en.word_wrap = True
-
-        # 영문 제목
-        p_en_title = tf_en.paragraphs[0]
-        p_en_title.text = article.get("title_eng", "") or article.get("title", "")
-        p_en_title.font.name = FONT_NAME
-        p_en_title.font.size = Pt(18)
-        p_en_title.font.bold = True
-        p_en_title.font.color.rgb = title_color
-        p_en_title.space_after = Pt(12)
-
-        summary_eng = article.get("summary_eng") or "No English summary"
-        eng_lines = [l.strip() for l in summary_eng.split('\n') if l.strip()]
-        for line in eng_lines:
-            p_eng = tf_en.add_paragraph()
-            p_eng.text = _to_bullet(line)
-            p_eng.font.name = FONT_NAME
-            p_eng.font.size = Pt(13)
-            p_eng.font.color.rgb = font_color
-            p_eng.line_spacing = Pt(20)
-            p_eng.space_before = Pt(2)
-
-        # 영문 영역 오른쪽에 이미지 배치 (같은 이미지 재사용)
+        # 오른쪽에 이미지 배치
         if has_image:
             image_data.seek(0)
-            img_top_en = en_top + (en_height - IMG_SIZE) // 2
-            slide.shapes.add_picture(image_data, img_left, img_top_en, IMG_SIZE, IMG_SIZE)
+            img_left = left + text_width + Inches(0.15)
+            img_top = box_top + (box_height - IMG_SIZE) // 2
+            slide.shapes.add_picture(image_data, img_left, img_top, IMG_SIZE, IMG_SIZE)
 
-        # URL 박스 (영문 요약 아래, 흰색 배경)
+        # URL을 슬라이드 노트에 추가
         if article_url:
-            url_top_en = en_top + en_height + Inches(0.05)
-            url_bg_en = slide.shapes.add_shape(1, left, url_top_en, full_width, url_height)
-            url_bg_en.fill.solid()
-            url_bg_en.fill.fore_color.rgb = RGBColor(255, 255, 255)
-            url_bg_en.line.fill.background()
-            url_box_en = slide.shapes.add_textbox(left + Inches(0.3), url_top_en + Inches(0.05), full_width - Inches(0.6), url_height - Inches(0.1))
-            tf_url_en = url_box_en.text_frame
-            tf_url_en.word_wrap = True
-            p_url_en = tf_url_en.paragraphs[0]
-            p_url_en.text = article_url
-            p_url_en.font.name = FONT_NAME
-            p_url_en.font.size = Pt(9)
-            p_url_en.font.color.rgb = url_color
+            notes_slide = slide.notes_slide
+            notes_slide.notes_text_frame.text = article_url
+
+    # 기사마다 한국어 슬라이드 1장 + 영문 슬라이드 1장
+    for article in articles:
+        article_url = article.get("link", "")
+        image_data = _fetch_og_image(article_url)
+
+        # 한국어 요약 슬라이드
+        ko_title = article.get("title", "")
+        ko_summary = article.get("summary") or "요약 없음"
+        _add_summary_slide(prs, ko_title, ko_summary, article_url, image_data)
+
+        # 영문 요약 슬라이드
+        en_title = article.get("title_eng", "") or article.get("title", "")
+        en_summary = article.get("summary_eng") or "No English summary"
+        _add_summary_slide(prs, en_title, en_summary, article_url, image_data, is_english=True)
 
     output = io.BytesIO()
     prs.save(output)
