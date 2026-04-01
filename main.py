@@ -84,8 +84,6 @@ def save_articles_to_db(articles, publisher=""):
             }
             if article.get("pub_date"):
                 row["published_at"] = article["pub_date"]
-            if article.get("image_url"):
-                row["image_url"] = article["image_url"]
             supabase.table("news-understanding").upsert(
                 row,
                 on_conflict="url",
@@ -158,7 +156,6 @@ def load_articles_by_publisher(publisher):
                 "pub_date": row.get("published_at", ""),
                 "publisher": row.get("publisher", ""),
                 "is_daily": row.get("is_daily", False),
-                "image_url": row.get("image_url", ""),
             }
             for row in all_rows
         ]
@@ -224,7 +221,6 @@ def load_daily_articles():
                 "pub_date": row.get("published_at", ""),
                 "publisher": row.get("publisher", ""),
                 "is_daily": True,
-                "image_url": row.get("image_url", ""),
             }
             for row in result.data
         ]
@@ -637,7 +633,6 @@ async def parse_rss_and_fetch_news(rss_url):
                 'link': it['link'],
                 'summary': '',
                 'pub_date': pub_date,
-                'image_url': image_url,
             })
     except Exception as e:
         raise Exception(f"RSS 파싱 중 오류 발생: {e}")
@@ -1668,15 +1663,27 @@ def generate_ppt(articles):
             return '∙' + line[1:]
         return line
 
-    def _download_image(url):
-        """이미지 URL에서 다운로드하여 BytesIO로 반환. 실패 시 None."""
-        if not url:
+    def _fetch_og_image(page_url):
+        """기사 URL에서 og:image를 추출하고 다운로드하여 BytesIO로 반환. 실패 시 None."""
+        if not page_url:
             return None
         try:
             with httpx.Client(follow_redirects=True, timeout=10.0) as client:
-                resp = client.get(url, headers={"User-Agent": "Mozilla/5.0"})
-                if resp.status_code == 200 and resp.headers.get("content-type", "").startswith("image"):
-                    return io.BytesIO(resp.content)
+                # 1) 페이지에서 og:image URL 추출
+                resp = client.get(page_url, headers={"User-Agent": "Mozilla/5.0"})
+                if resp.status_code >= 400:
+                    return None
+                soup = BeautifulSoup(resp.text[:200_000], 'html.parser')
+                og_img = soup.find('meta', property='og:image')
+                if not og_img or not og_img.get('content', '').strip():
+                    og_img = soup.find('meta', attrs={'name': 'twitter:image'})
+                if not og_img or not og_img.get('content', '').strip():
+                    return None
+                img_url = og_img['content'].strip()
+                # 2) 이미지 다운로드
+                img_resp = client.get(img_url, headers={"User-Agent": "Mozilla/5.0"})
+                if img_resp.status_code == 200 and img_resp.headers.get("content-type", "").startswith("image"):
+                    return io.BytesIO(img_resp.content)
         except Exception:
             pass
         return None
@@ -1696,8 +1703,8 @@ def generate_ppt(articles):
         article_url = article.get("link", "")
         url_color = RGBColor(100, 100, 100)
 
-        # 이미지 다운로드
-        image_data = _download_image(article.get("image_url", ""))
+        # 기사 URL에서 og:image 추출 및 다운로드
+        image_data = _fetch_og_image(article.get("link", ""))
         has_image = image_data is not None
         text_width = TEXT_WIDTH if has_image else full_width
 
@@ -1918,7 +1925,7 @@ async def api_fetch_urls(request: Request):
     for (title, body, pub_date, image_url), url in zip(results, urls[:20]):
         is_error = title == "추출 실패" or body.startswith("[추출 실패]")
         is_paywall = body.startswith("[페이월/접근 제한]")
-        articles.append({"title": title, "body": body, "link": url, "error": is_error, "paywall": is_paywall, "pub_date": pub_date, "image_url": image_url})
+        articles.append({"title": title, "body": body, "link": url, "error": is_error, "paywall": is_paywall, "pub_date": pub_date})
     return JSONResponse({"articles": articles})
 
 
