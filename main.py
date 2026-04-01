@@ -1621,7 +1621,7 @@ def generate_ppt(articles):
     prs = Presentation()
     prs.slide_width = Inches(13.333)
     prs.slide_height = Inches(7.5)
-    FONT_NAME = 'SamsungOne'
+    FONT_NAME = 'SamsungOne 700'
 
     # 타이틀 슬라이드
     slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank
