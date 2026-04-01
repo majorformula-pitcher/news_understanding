@@ -1682,7 +1682,7 @@ def generate_ppt(articles):
             summary_lines = [l.strip() for l in summary_text.split('\n') if l.strip()]
         for line in summary_lines:
             p_sum = tf_ko.add_paragraph()
-            p_sum.text = line
+            p_sum.text = '•' + line[1:] if line.startswith('.') else line
             p_sum.font.name = FONT_NAME
             p_sum.font.size = Pt(13)
             p_sum.font.color.rgb = font_color
@@ -1733,7 +1733,7 @@ def generate_ppt(articles):
             eng_lines = [l.strip() for l in summary_eng.split('\n') if l.strip()]
         for line in eng_lines:
             p_eng = tf_en.add_paragraph()
-            p_eng.text = line
+            p_eng.text = '•' + line[1:] if line.startswith('.') else line
             p_eng.font.name = FONT_NAME
             p_eng.font.size = Pt(13)
             p_eng.font.color.rgb = font_color
