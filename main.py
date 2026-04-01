@@ -1689,45 +1689,85 @@ def generate_ppt(articles):
         return None
 
     IMG_SIZE = Cm(5)  # 5cm x 5cm
-    TEXT_WIDTH = Inches(12.3) - IMG_SIZE - Inches(0.3)  # 텍스트 영역 (이미지 공간 확보)
+    IMG_COL_WIDTH = Cm(5.5)  # 이미지 컬럼 (이미지 + 여백)
+    TABLE_LEFT = Inches(0.5)
+    TABLE_TOP = Inches(0.3)
+    TABLE_WIDTH = Inches(12.3)
+    TABLE_HEIGHT = Inches(6.5)
+    TITLE_ROW_HEIGHT = Inches(1.0)
+    BODY_ROW_HEIGHT = TABLE_HEIGHT - TITLE_ROW_HEIGHT
+
+    def _set_cell_font(cell, text, font_name, font_size, bold=False, color=None):
+        """셀에 텍스트 설정 및 폰트 적용"""
+        cell.text = ""
+        p = cell.text_frame.paragraphs[0]
+        p.text = text
+        p.font.name = font_name
+        p.font.size = font_size
+        p.font.bold = bold
+        if color:
+            p.font.color.rgb = color
+        cell.text_frame.word_wrap = True
 
     def _add_summary_slide(prs, title_text, summary_text, article_url, image_data, is_english=False):
-        """요약 슬라이드 1장 생성. URL은 슬라이드 노트에 추가."""
+        """요약 슬라이드 1장 생성. 표 레이아웃: Row1=제목, Row2=요약|이미지"""
+        from pptx.oxml.ns import qn
+
         slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank
-        left = Inches(0.5)
-        full_width = Inches(12.3)
-        bg_color = RGBColor(230, 230, 230)
         font_color = RGBColor(0, 0, 0)
         title_color = RGBColor(0, 51, 153)
-
         has_image = image_data is not None
-        text_width = TEXT_WIDTH if has_image else full_width
 
-        # 요약 영역 (슬라이드 중앙에 크게 배치)
-        box_top = Inches(0.3)
-        box_height = Inches(6.5)
-        bg_shape = slide.shapes.add_shape(1, left, box_top, full_width, box_height)
-        bg_shape.fill.solid()
-        bg_shape.fill.fore_color.rgb = bg_color
-        bg_shape.line.fill.background()
+        # 표 생성: 2행 x 2열
+        cols = 2 if has_image else 1
+        table_shape = slide.shapes.add_table(2, cols, TABLE_LEFT, TABLE_TOP, TABLE_WIDTH, TABLE_HEIGHT)
+        table = table_shape.table
 
-        text_box = slide.shapes.add_textbox(left + Inches(0.3), box_top + Inches(0.2), text_width - Inches(0.6), box_height - Inches(0.4))
-        tf = text_box.text_frame
-        tf.word_wrap = True
+        # 컬럼 폭 설정
+        if has_image:
+            text_col_width = TABLE_WIDTH - IMG_COL_WIDTH
+            table.columns[0].width = int(text_col_width)
+            table.columns[1].width = int(IMG_COL_WIDTH)
+        else:
+            table.columns[0].width = int(TABLE_WIDTH)
 
-        # 제목
-        p_title = tf.paragraphs[0]
+        # 행 높이 설정
+        table.rows[0].height = int(TITLE_ROW_HEIGHT)
+        table.rows[1].height = int(BODY_ROW_HEIGHT)
+
+        # Row 0: 제목 (셀 병합)
+        if has_image:
+            # 첫 번째 행의 두 셀을 병합
+            cell_title_left = table.cell(0, 0)
+            cell_title_right = table.cell(0, 1)
+            cell_title_left.merge(cell_title_right)
+        title_cell = table.cell(0, 0)
+        title_cell.text = ""
+        p_title = title_cell.text_frame.paragraphs[0]
         p_title.text = title_text
         p_title.font.name = FONT_NAME
         p_title.font.size = Pt(18)
         p_title.font.bold = True
         p_title.font.color.rgb = title_color
-        p_title.space_after = Pt(12)
+        title_cell.text_frame.word_wrap = True
+        # 제목 셀 배경색
+        title_cell.fill.solid()
+        title_cell.fill.fore_color.rgb = RGBColor(230, 230, 230)
 
-        # 요약 본문
+        # Row 1, Col 0: 요약 본문
+        summary_cell = table.cell(1, 0)
+        summary_cell.text = ""
+        summary_cell.fill.solid()
+        summary_cell.fill.fore_color.rgb = RGBColor(230, 230, 230)
+        summary_cell.text_frame.word_wrap = True
         lines = [l.strip() for l in summary_text.split('\n') if l.strip()]
+        first = True
         for line in lines:
-            p = tf.add_paragraph()
+            if first:
+                p = summary_cell.text_frame.paragraphs[0]
+                first = False
+            else:
+                p = summary_cell.text_frame.add_paragraph()
             p.text = _to_bullet(line)
             p.font.name = FONT_NAME
             p.font.size = Pt(13)
@@ -1735,12 +1775,35 @@ def generate_ppt(articles):
             p.line_spacing = Pt(20)
             p.space_before = Pt(2)
 
-        # 오른쪽에 이미지 배치
+        # Row 1, Col 1: 이미지 셀 (이미지를 셀 위에 겹쳐서 배치)
         if has_image:
+            img_cell = table.cell(1, 1)
+            img_cell.text = ""
+            img_cell.fill.solid()
+            img_cell.fill.fore_color.rgb = RGBColor(230, 230, 230)
+            # 이미지를 표의 오른쪽 셀 영역 중앙에 배치
             image_data.seek(0)
-            img_left = left + text_width + Inches(0.15)
-            img_top = box_top + (box_height - IMG_SIZE) // 2
+            img_left = TABLE_LEFT + int(table.columns[0].width) + (IMG_COL_WIDTH - IMG_SIZE) // 2
+            img_top = TABLE_TOP + TITLE_ROW_HEIGHT + (BODY_ROW_HEIGHT - IMG_SIZE) // 2
             slide.shapes.add_picture(image_data, img_left, img_top, IMG_SIZE, IMG_SIZE)
+
+        # 표 테두리 제거
+        for row_idx in range(len(table.rows)):
+            for col_idx in range(cols):
+                cell = table.cell(row_idx, col_idx)
+                tc = cell._tc
+                tcPr = tc.get_or_add_tcPr()
+                for border_name in ['a:lnL', 'a:lnR', 'a:lnT', 'a:lnB']:
+                    border = tcPr.find(qn(border_name))
+                    if border is None:
+                        border = tcPr.makeelement(qn(border_name), {})
+                        tcPr.append(border)
+                    border.set('w', '0')
+                    noFill = border.makeelement(qn('a:noFill'), {})
+                    # 기존 fill 제거 후 noFill 추가
+                    for child in list(border):
+                        border.remove(child)
+                    border.append(noFill)
 
         # URL을 슬라이드 노트에 추가
         if article_url:
