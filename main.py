@@ -1770,10 +1770,10 @@ def generate_ppt(articles):
                 p = summary_cell.text_frame.add_paragraph()
             p.text = _to_bullet(line)
             p.font.name = FONT_NAME
-            p.font.size = Pt(18)
+            p.font.size = Pt(24)
             p.font.color.rgb = font_color
-            p.line_spacing = Pt(28)
-            p.space_before = Pt(4)
+            p.line_spacing = Pt(36)
+            p.space_before = Pt(6)
 
         # Row 1, Col 1: 이미지 셀 (이미지를 셀 위에 겹쳐서 배치)
         if has_image:
@@ -1797,13 +1797,9 @@ def generate_ppt(articles):
                     border = tcPr.find(qn(border_name))
                     if border is not None:
                         tcPr.remove(border)
-                    border = tcPr.makeelement(qn(border_name), {'w': '12700', 'cap': 'flat', 'cmpd': 'sng'})
-                    solidFill = border.makeelement(qn('a:solidFill'), {})
-                    srgbClr = solidFill.makeelement(qn('a:srgbClr'), {'val': 'E6E6E6'})
-                    alpha = srgbClr.makeelement(qn('a:alpha'), {'val': '0'})
-                    srgbClr.append(alpha)
-                    solidFill.append(srgbClr)
-                    border.append(solidFill)
+                    border = tcPr.makeelement(qn(border_name), {'w': '0'})
+                    noFill = border.makeelement(qn('a:noFill'), {})
+                    border.append(noFill)
                     tcPr.append(border)
 
         # URL을 슬라이드 노트에 추가
