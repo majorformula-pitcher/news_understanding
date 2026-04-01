@@ -11,7 +11,7 @@ from jinja2 import Template
 import anthropic
 from supabase import create_client
 from pptx import Presentation
-from pptx.util import Inches, Pt, Emu
+from pptx.util import Inches, Pt, Emu, Cm
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
 import xlsxwriter
@@ -84,6 +84,8 @@ def save_articles_to_db(articles, publisher=""):
             }
             if article.get("pub_date"):
                 row["published_at"] = article["pub_date"]
+            if article.get("image_url"):
+                row["image_url"] = article["image_url"]
             supabase.table("news-understanding").upsert(
                 row,
                 on_conflict="url",
@@ -156,6 +158,7 @@ def load_articles_by_publisher(publisher):
                 "pub_date": row.get("published_at", ""),
                 "publisher": row.get("publisher", ""),
                 "is_daily": row.get("is_daily", False),
+                "image_url": row.get("image_url", ""),
             }
             for row in all_rows
         ]
@@ -221,6 +224,7 @@ def load_daily_articles():
                 "pub_date": row.get("published_at", ""),
                 "publisher": row.get("publisher", ""),
                 "is_daily": True,
+                "image_url": row.get("image_url", ""),
             }
             for row in result.data
         ]
@@ -392,18 +396,20 @@ async def get_news_content(url):
                 err_desc = og_d['content'].strip() if og_d and og_d.get('content') else ""
                 if err_title and err_desc:
                     reason = "[페이월/접근 제한] 전체 본문을 가져올 수 없어 요약 정보만 표시합니다."
-                    return err_title, reason + "\n\n" + err_desc, ""
+                    og_img = soup_err.find('meta', property='og:image')
+                    err_image = og_img['content'].strip() if og_img and og_img.get('content') else ""
+                    return err_title, reason + "\n\n" + err_desc, "", err_image
                 if status_code == 403:
-                    return "추출 실패", "[추출 실패] HTTP 403 Forbidden — 이 사이트는 봇 접근을 차단하고 있습니다. (페이월 또는 봇 방지)", ""
+                    return "추출 실패", "[추출 실패] HTTP 403 Forbidden — 이 사이트는 봇 접근을 차단하고 있습니다. (페이월 또는 봇 방지)", "", ""
                 elif status_code == 401:
-                    return "추출 실패", "[추출 실패] HTTP 401 Unauthorized — 로그인이 필요한 페이지입니다.", ""
+                    return "추출 실패", "[추출 실패] HTTP 401 Unauthorized — 로그인이 필요한 페이지입니다.", "", ""
                 else:
-                    return "추출 실패", f"[추출 실패] HTTP {status_code} — 서버에서 요청을 거부했습니다.", ""
+                    return "추출 실패", f"[추출 실패] HTTP {status_code} — 서버에서 요청을 거부했습니다.", "", ""
 
         # JavaScript 렌더링 전용 페이지 감지
         if len(html_text.strip()) < 500 and ('javascript' in html_text.lower() or 'noscript' in html_text.lower()):
             error_reason = "[추출 실패] 이 페이지는 JavaScript로 렌더링되어 서버에서 직접 추출할 수 없습니다."
-            return "추출 실패", error_reason, ""
+            return "추출 실패", error_reason, "", ""
 
         soup = BeautifulSoup(html_text, 'html.parser')
 
@@ -506,7 +512,7 @@ async def get_news_content(url):
 
             if not body:
                 error_reason = "[추출 실패] 이 페이지에서 뉴스 본문 영역을 찾을 수 없습니다. 페이월, JavaScript 렌더링, 또는 비표준 HTML 구조일 수 있습니다."
-                return title or "추출 실패", error_reason, pub_date
+                return title or "추출 실패", error_reason, pub_date, ""
 
         # 텍스트 정제
         body = re.sub(r'Back to Articles\s*', '', body)
@@ -519,6 +525,16 @@ async def get_news_content(url):
         if len(body) > 5000:
             body = body[:5000]
 
+        # --- og:image 추출 ---
+        image_url = ""
+        og_image = soup.find('meta', property='og:image')
+        if og_image and og_image.get('content', '').strip():
+            image_url = og_image['content'].strip()
+        else:
+            twitter_image = soup.find('meta', attrs={'name': 'twitter:image'})
+            if twitter_image and twitter_image.get('content', '').strip():
+                image_url = twitter_image['content'].strip()
+
         if len(body) < 50:
             # meta description이라도 있으면 그것을 보여줌
             og_desc = soup.find('meta', property='og:description')
@@ -529,17 +545,17 @@ async def get_news_content(url):
             elif meta_desc_tag and meta_desc_tag.get('content', '').strip():
                 fallback = meta_desc_tag['content'].strip()
             if fallback:
-                return title or "추출 실패", "[페이월/접근 제한] 전체 본문을 가져올 수 없어 요약 정보만 표시합니다.\n\n" + fallback, pub_date
+                return title or "추출 실패", "[페이월/접근 제한] 전체 본문을 가져올 수 없어 요약 정보만 표시합니다.\n\n" + fallback, pub_date, image_url
             error_reason = f"[추출 실패] 본문이 너무 짧습니다 ({len(body)}자). 페이월이 있거나 JavaScript로 렌더링되는 페이지일 수 있습니다."
-            return title or "추출 실패", error_reason, pub_date
+            return title or "추출 실패", error_reason, pub_date, image_url
 
-        return title, body, pub_date
+        return title, body, pub_date, image_url
     except httpx.TimeoutException:
-        return "추출 실패", "[추출 실패] 요청 시간이 초과되었습니다 (15초). 서버가 응답하지 않거나 봇 접근을 차단하고 있을 수 있습니다.", ""
+        return "추출 실패", "[추출 실패] 요청 시간이 초과되었습니다 (15초). 서버가 응답하지 않거나 봇 접근을 차단하고 있을 수 있습니다.", "", ""
     except httpx.ConnectError:
-        return "추출 실패", f"[추출 실패] 서버에 연결할 수 없습니다. URL을 확인해주세요: {url}", ""
+        return "추출 실패", f"[추출 실패] 서버에 연결할 수 없습니다. URL을 확인해주세요: {url}", "", ""
     except Exception as e:
-        return "추출 실패", f"[추출 실패] {type(e).__name__}: {e}", ""
+        return "추출 실패", f"[추출 실패] {type(e).__name__}: {e}", "", ""
 
 async def parse_rss_and_fetch_news(rss_url):
     headers = {
@@ -608,7 +624,7 @@ async def parse_rss_and_fetch_news(rss_url):
             batch_results = await asyncio.gather(*batch_tasks)
             fetched_results.extend(batch_results)
 
-        for (title, body, page_date), it in zip(fetched_results, new_items):
+        for (title, body, page_date, image_url), it in zip(fetched_results, new_items):
             # 페이지 접근 실패 시 RSS 데이터로 대체
             if title.startswith("오류 발생:") or not body or body == "본문을 찾을 수 없습니다." or body.startswith("[추출 실패]") or body.startswith("[페이월"):
                 title = it['rss_title'] or title
@@ -620,7 +636,8 @@ async def parse_rss_and_fetch_news(rss_url):
                 'body': body,
                 'link': it['link'],
                 'summary': '',
-                'pub_date': pub_date
+                'pub_date': pub_date,
+                'image_url': image_url,
             })
     except Exception as e:
         raise Exception(f"RSS 파싱 중 오류 발생: {e}")
@@ -1651,11 +1668,27 @@ def generate_ppt(articles):
             return '∙' + line[1:]
         return line
 
+    def _download_image(url):
+        """이미지 URL에서 다운로드하여 BytesIO로 반환. 실패 시 None."""
+        if not url:
+            return None
+        try:
+            with httpx.Client(follow_redirects=True, timeout=10.0) as client:
+                resp = client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+                if resp.status_code == 200 and resp.headers.get("content-type", "").startswith("image"):
+                    return io.BytesIO(resp.content)
+        except Exception:
+            pass
+        return None
+
+    IMG_SIZE = Cm(5)  # 5cm x 5cm
+    TEXT_WIDTH = Inches(12.3) - IMG_SIZE - Inches(0.3)  # 텍스트 영역 (이미지 공간 확보)
+
     # 기사 1개씩 슬라이드에 배치 (위: 한국어 요약, 아래: 영문 요약)
     for article in articles:
         slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank
         left = Inches(0.5)
-        width = Inches(12.3)
+        full_width = Inches(12.3)
         bg_color = RGBColor(230, 230, 230)
         font_color = RGBColor(0, 0, 0)
         title_color = RGBColor(0, 51, 153)
@@ -1663,15 +1696,20 @@ def generate_ppt(articles):
         article_url = article.get("link", "")
         url_color = RGBColor(100, 100, 100)
 
+        # 이미지 다운로드
+        image_data = _download_image(article.get("image_url", ""))
+        has_image = image_data is not None
+        text_width = TEXT_WIDTH if has_image else full_width
+
         # 한국어 요약 영역 (위쪽)
         ko_top = Inches(0.3)
         ko_height = Inches(2.8)
-        bg_ko = slide.shapes.add_shape(1, left, ko_top, width, ko_height)
+        bg_ko = slide.shapes.add_shape(1, left, ko_top, full_width, ko_height)
         bg_ko.fill.solid()
         bg_ko.fill.fore_color.rgb = bg_color
         bg_ko.line.fill.background()
 
-        ko_box = slide.shapes.add_textbox(left + Inches(0.3), ko_top + Inches(0.2), width - Inches(0.6), ko_height - Inches(0.4))
+        ko_box = slide.shapes.add_textbox(left + Inches(0.3), ko_top + Inches(0.2), text_width - Inches(0.6), ko_height - Inches(0.4))
         tf_ko = ko_box.text_frame
         tf_ko.word_wrap = True
 
@@ -1695,15 +1733,21 @@ def generate_ppt(articles):
             p_sum.line_spacing = Pt(20)
             p_sum.space_before = Pt(2)
 
+        # 한국어 영역 오른쪽에 이미지 배치
+        if has_image:
+            img_left = left + text_width + Inches(0.15)
+            img_top = ko_top + (ko_height - IMG_SIZE) // 2  # 세로 중앙
+            slide.shapes.add_picture(image_data, img_left, img_top, IMG_SIZE, IMG_SIZE)
+
         # URL 박스 (한국어 요약 아래, 흰색 배경)
         if article_url:
             url_top_ko = ko_top + ko_height + Inches(0.05)
             url_height = Inches(0.3)
-            url_bg_ko = slide.shapes.add_shape(1, left, url_top_ko, width, url_height)
+            url_bg_ko = slide.shapes.add_shape(1, left, url_top_ko, full_width, url_height)
             url_bg_ko.fill.solid()
             url_bg_ko.fill.fore_color.rgb = RGBColor(255, 255, 255)
             url_bg_ko.line.fill.background()
-            url_box_ko = slide.shapes.add_textbox(left + Inches(0.3), url_top_ko + Inches(0.05), width - Inches(0.6), url_height - Inches(0.1))
+            url_box_ko = slide.shapes.add_textbox(left + Inches(0.3), url_top_ko + Inches(0.05), full_width - Inches(0.6), url_height - Inches(0.1))
             tf_url_ko = url_box_ko.text_frame
             tf_url_ko.word_wrap = True
             p_url_ko = tf_url_ko.paragraphs[0]
@@ -1715,12 +1759,12 @@ def generate_ppt(articles):
         # 영문 요약 영역 (아래쪽) - 동일한 배경색과 폰트
         en_top = Inches(3.75)
         en_height = Inches(2.8)
-        bg_en = slide.shapes.add_shape(1, left, en_top, width, en_height)
+        bg_en = slide.shapes.add_shape(1, left, en_top, full_width, en_height)
         bg_en.fill.solid()
         bg_en.fill.fore_color.rgb = bg_color
         bg_en.line.fill.background()
 
-        en_box = slide.shapes.add_textbox(left + Inches(0.3), en_top + Inches(0.2), width - Inches(0.6), en_height - Inches(0.4))
+        en_box = slide.shapes.add_textbox(left + Inches(0.3), en_top + Inches(0.2), text_width - Inches(0.6), en_height - Inches(0.4))
         tf_en = en_box.text_frame
         tf_en.word_wrap = True
 
@@ -1744,14 +1788,20 @@ def generate_ppt(articles):
             p_eng.line_spacing = Pt(20)
             p_eng.space_before = Pt(2)
 
+        # 영문 영역 오른쪽에 이미지 배치 (같은 이미지 재사용)
+        if has_image:
+            image_data.seek(0)
+            img_top_en = en_top + (en_height - IMG_SIZE) // 2
+            slide.shapes.add_picture(image_data, img_left, img_top_en, IMG_SIZE, IMG_SIZE)
+
         # URL 박스 (영문 요약 아래, 흰색 배경)
         if article_url:
             url_top_en = en_top + en_height + Inches(0.05)
-            url_bg_en = slide.shapes.add_shape(1, left, url_top_en, width, url_height)
+            url_bg_en = slide.shapes.add_shape(1, left, url_top_en, full_width, url_height)
             url_bg_en.fill.solid()
             url_bg_en.fill.fore_color.rgb = RGBColor(255, 255, 255)
             url_bg_en.line.fill.background()
-            url_box_en = slide.shapes.add_textbox(left + Inches(0.3), url_top_en + Inches(0.05), width - Inches(0.6), url_height - Inches(0.1))
+            url_box_en = slide.shapes.add_textbox(left + Inches(0.3), url_top_en + Inches(0.05), full_width - Inches(0.6), url_height - Inches(0.1))
             tf_url_en = url_box_en.text_frame
             tf_url_en.word_wrap = True
             p_url_en = tf_url_en.paragraphs[0]
@@ -1865,10 +1915,10 @@ async def api_fetch_urls(request: Request):
     fetch_tasks = [get_news_content(url) for url in urls[:20]]
     results = await asyncio.gather(*fetch_tasks)
     articles = []
-    for (title, body, pub_date), url in zip(results, urls[:20]):
+    for (title, body, pub_date, image_url), url in zip(results, urls[:20]):
         is_error = title == "추출 실패" or body.startswith("[추출 실패]")
         is_paywall = body.startswith("[페이월/접근 제한]")
-        articles.append({"title": title, "body": body, "link": url, "error": is_error, "paywall": is_paywall, "pub_date": pub_date})
+        articles.append({"title": title, "body": body, "link": url, "error": is_error, "paywall": is_paywall, "pub_date": pub_date, "image_url": image_url})
     return JSONResponse({"articles": articles})
 
 
