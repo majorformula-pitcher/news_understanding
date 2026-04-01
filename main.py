@@ -1621,6 +1621,7 @@ def generate_ppt(articles):
     prs = Presentation()
     prs.slide_width = Inches(13.333)
     prs.slide_height = Inches(7.5)
+    FONT_NAME = 'SamsungOne'
 
     # 타이틀 슬라이드
     slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank
@@ -1629,6 +1630,7 @@ def generate_ppt(articles):
     tf.word_wrap = True
     p = tf.paragraphs[0]
     p.text = "뉴스 핵심 요약"
+    p.font.name = FONT_NAME
     p.font.size = Pt(44)
     p.font.bold = True
     p.font.color.rgb = RGBColor(26, 115, 232)
@@ -1636,6 +1638,7 @@ def generate_ppt(articles):
 
     p2 = tf.add_paragraph()
     p2.text = f"총 {len(articles)}건"
+    p2.font.name = FONT_NAME
     p2.font.size = Pt(24)
     p2.font.color.rgb = RGBColor(100, 100, 100)
     p2.alignment = PP_ALIGN.CENTER
@@ -1667,6 +1670,7 @@ def generate_ppt(articles):
         # 한국어 제목
         p_ko_title = tf_ko.paragraphs[0]
         p_ko_title.text = article.get("title", "")
+        p_ko_title.font.name = FONT_NAME
         p_ko_title.font.size = Pt(18)
         p_ko_title.font.bold = True
         p_ko_title.font.color.rgb = title_color
@@ -1679,6 +1683,7 @@ def generate_ppt(articles):
         for line in summary_lines:
             p_sum = tf_ko.add_paragraph()
             p_sum.text = line
+            p_sum.font.name = FONT_NAME
             p_sum.font.size = Pt(13)
             p_sum.font.color.rgb = font_color
             p_sum.line_spacing = Pt(20)
@@ -1697,6 +1702,7 @@ def generate_ppt(articles):
             tf_url_ko.word_wrap = True
             p_url_ko = tf_url_ko.paragraphs[0]
             p_url_ko.text = article_url
+            p_url_ko.font.name = FONT_NAME
             p_url_ko.font.size = Pt(9)
             p_url_ko.font.color.rgb = url_color
 
@@ -1715,6 +1721,7 @@ def generate_ppt(articles):
         # 영문 제목
         p_en_title = tf_en.paragraphs[0]
         p_en_title.text = article.get("title_eng", "") or article.get("title", "")
+        p_en_title.font.name = FONT_NAME
         p_en_title.font.size = Pt(18)
         p_en_title.font.bold = True
         p_en_title.font.color.rgb = title_color
@@ -1727,6 +1734,7 @@ def generate_ppt(articles):
         for line in eng_lines:
             p_eng = tf_en.add_paragraph()
             p_eng.text = line
+            p_eng.font.name = FONT_NAME
             p_eng.font.size = Pt(13)
             p_eng.font.color.rgb = font_color
             p_eng.line_spacing = Pt(20)
@@ -1744,6 +1752,7 @@ def generate_ppt(articles):
             tf_url_en.word_wrap = True
             p_url_en = tf_url_en.paragraphs[0]
             p_url_en.text = article_url
+            p_url_en.font.name = FONT_NAME
             p_url_en.font.size = Pt(9)
             p_url_en.font.color.rgb = url_color
 
