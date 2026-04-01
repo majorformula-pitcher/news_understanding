@@ -250,14 +250,37 @@ def get_news_stats():
         print(f"뉴스 통계 조회 오류: {e}")
         return {}
 
+def _is_english_text(text):
+    """텍스트가 영문인지 판별 (한글이 없으면 영문으로 간주)"""
+    return not bool(re.search(r'[가-힣]', text))
+
 async def summarize_article(title, body):
+    """한국어 요약 반환. 영문 기사면 제목도 한글 번역하여 (summary, title_ko) 튜플 반환."""
     if not ANTHROPIC_API_KEY or not client:
-        return "⚠️ API 키가 설정되지 않았습니다. Render.com 설정에서 ANTHROPIC_API_KEY를 추가해주세요."
+        return "⚠️ API 키가 설정되지 않았습니다. Render.com 설정에서 ANTHROPIC_API_KEY를 추가해주세요.", ""
 
     if not body or body == "Content not found" or len(body) < 100:
-        return "요약할 충분한 본문 내용이 없습니다."
+        return "요약할 충분한 본문 내용이 없습니다.", ""
 
-    prompt = f"""다음 뉴스 기사를 읽고 아래 형식에 정확히 맞춰 요약해 주세요.
+    is_english = _is_english_text(title)
+
+    if is_english:
+        prompt = f"""다음 영문 뉴스 기사를 읽고 아래 형식에 정확히 맞춰 한국어로 요약해 주세요.
+
+형식:
+제목: <기사 제목을 한국어로 번역>
+. 핵심 요약 첫 번째 줄 (한국어, 2줄 이내)
+. 핵심 요약 두 번째 줄 (한국어, 2줄 이내)
+
+주의사항:
+- 반드시 '제목:'으로 시작하는 한국어 번역 제목 1줄 + '.'으로 시작하는 2개의 한국어 요약 문장을 작성하세요.
+- 불필요한 설명 없이 핵심만 전달하세요.
+- 마크다운 문법(**, ##, *, # 등)을 절대 사용하지 마세요. 순수 텍스트로만 작성하세요.
+
+기사 제목: {title}
+기사 본문: {body}"""
+    else:
+        prompt = f"""다음 뉴스 기사를 읽고 아래 형식에 정확히 맞춰 요약해 주세요.
 
 형식:
 . 핵심 요약 첫 번째 줄 (2줄 이내)
@@ -284,14 +307,22 @@ async def summarize_article(title, body):
         text = re.sub(r'#+\s*', '', text)
         text = re.sub(r'`+', '', text)
         text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
-        return text.strip()
+        text = text.strip()
+
+        if is_english:
+            title_ko = ""
+            summary_lines = []
+            for line in text.split('\n'):
+                stripped = line.strip()
+                if stripped.startswith('제목:'):
+                    title_ko = stripped[3:].strip()
+                elif stripped:
+                    summary_lines.append(stripped)
+            return '\n'.join(summary_lines), title_ko
+
+        return text, ""
     except Exception as e:
-        return f"요약 중 오류가 발생했습니다: {str(e)}"
-
-def _is_english_text(text):
-    """텍스트가 영문인지 판별 (한글이 없으면 영문으로 간주)"""
-    return not bool(re.search(r'[가-힣]', text))
-
+        return f"요약 중 오류가 발생했습니다: {str(e)}", ""
 
 async def summarize_article_eng(title, body):
     """영문 요약 + 영문 제목 반환 (원본이 영문이면 제목은 그대로 사용)"""
@@ -1905,11 +1936,14 @@ async def api_summarize(request: Request):
     link = data.get("link", "")
     publisher = data.get("publisher", "")
     # 한국어/영어 요약 동시 실행
-    summary, eng_result = await asyncio.gather(
+    ko_result, eng_result = await asyncio.gather(
         summarize_article(title, body),
         summarize_article_eng(title, body),
     )
-    summary_eng, title_eng, title_ko = eng_result
+    summary, title_ko_from_summary = ko_result
+    summary_eng, title_eng, title_ko_from_eng = eng_result
+    # 한글 제목: summarize_article에서 번역한 것 우선, 없으면 eng에서 가져옴
+    title_ko = title_ko_from_summary or title_ko_from_eng
     # DB 업데이트
     if summary and link:
         updated = update_article_summary(link, summary, summary_eng, title_eng, title_ko)
