@@ -1541,7 +1541,8 @@ HTML_TEMPLATE = """
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'daily_news.pptx';
+            var today = new Date(); var ymd = today.getFullYear() + String(today.getMonth()+1).padStart(2,'0') + String(today.getDate()).padStart(2,'0');
+            a.download = 'daily_news_' + ymd + '.pptx';
             a.click();
             URL.revokeObjectURL(url);
         } catch (e) {
@@ -1802,14 +1803,14 @@ def generate_ppt(articles):
             img_top = TABLE_TOP + TITLE_ROW_HEIGHT + (BODY_ROW_HEIGHT - IMG_SIZE) // 2
             slide.shapes.add_picture(image_data, img_left, img_top, IMG_SIZE, IMG_SIZE)
 
-        # 표 테두리 완전 제거
+        # 표 테두리를 배경색(E6E6E6)과 동일하게 설정하여 안 보이게 처리
         tbl = table._tbl
         tblPr = tbl.tblPr
-        # 테이블 전체 스타일에서 테두리 제거
-        for child in list(tblPr):
-            if 'bandRow' not in child.tag and 'bandCol' not in child.tag:
-                pass  # 유지
-        # 개별 셀 테두리 제거
+        # tblStyle 제거 (기본 테마 테두리 방지)
+        tblStyleId = tblPr.find(qn('a:tblStyleId'))
+        if tblStyleId is not None:
+            tblPr.remove(tblStyleId)
+        # 개별 셀 테두리: 배경색과 동일한 색상으로 설정
         for row_idx in range(len(table.rows)):
             for col_idx in range(cols):
                 cell = table.cell(row_idx, col_idx)
@@ -1819,15 +1820,12 @@ def generate_ppt(articles):
                     border = tcPr.find(qn(border_name))
                     if border is not None:
                         tcPr.remove(border)
-                    # 폭 0, prstDash=solid, noFill 조합으로 완전히 숨김
-                    ln = tcPr.makeelement(qn(border_name), {'w': '0', 'algn': 'ctr'})
-                    ln.append(ln.makeelement(qn('a:noFill'), {}))
-                    ln.append(ln.makeelement(qn('a:prstDash'), {'val': 'solid'}))
+                    ln = tcPr.makeelement(qn(border_name), {'w': '3175'})
+                    solidFill = ln.makeelement(qn('a:solidFill'), {})
+                    srgbClr = solidFill.makeelement(qn('a:srgbClr'), {'val': 'E6E6E6'})
+                    solidFill.append(srgbClr)
+                    ln.append(solidFill)
                     tcPr.append(ln)
-        # tblStyle 제거 (기본 테마 테두리 방지)
-        tblStyleId = tblPr.find(qn('a:tblStyleId'))
-        if tblStyleId is not None:
-            tblPr.remove(tblStyleId)
 
         # URL을 슬라이드 노트에 추가
         if article_url:
@@ -1839,13 +1837,18 @@ def generate_ppt(articles):
         article_url = article.get("link", "")
         image_data = _fetch_og_image(article_url)
 
-        # 한국어 요약 슬라이드
-        ko_title = article.get("title", "")
+        title = article.get("title", "")
+        title_eng = article.get("title_eng", "")
+        is_eng_article = _is_english_text(title)
+
+        # 한국어 요약 슬라이드: 영문 기사면 title_eng에 한글 번역이 없으므로 title 그대로 사용
+        # (DB에서 title이 한글로 업데이트된 경우 그대로 사용)
+        ko_title = title
         ko_summary = article.get("summary") or "요약 없음"
         _add_summary_slide(prs, ko_title, ko_summary, article_url, image_data)
 
         # 영문 요약 슬라이드
-        en_title = article.get("title_eng", "") or article.get("title", "")
+        en_title = title_eng if title_eng else title
         en_summary = article.get("summary_eng") or "No English summary"
         _add_summary_slide(prs, en_title, en_summary, article_url, image_data, is_english=True)
 
@@ -1973,9 +1976,8 @@ async def api_save_custom_articles(request: Request):
 
 @app.post("/api/daily-ppt")
 async def daily_ppt(request: Request):
-    """Daily News 선택 기사들로 PPT 생성"""
-    data = await request.json()
-    articles = data.get("articles", [])
+    """Daily News 선택 기사들로 PPT 생성 (DB에서 최신 데이터 로드)"""
+    articles = load_daily_articles()
     if not articles:
         return JSONResponse({"error": "선택된 기사가 없습니다."}, status_code=400)
     output = generate_ppt(articles)
