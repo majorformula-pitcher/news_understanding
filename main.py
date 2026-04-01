@@ -1263,9 +1263,10 @@ HTML_TEMPLATE = """
                         body: JSON.stringify({ title: article.title, body: article.body, link: article.link, publisher: currentFeedName })
                     });
                     const data = await res.json();
+                    if (data.summary) { articles[idx].summary = data.summary; var cd = document.querySelector('#summary-' + idx + ' .summary-content'); if (cd) cd.textContent = data.summary; }
                     if (data.summary_eng) articles[idx].summary_eng = data.summary_eng;
                     if (data.title_eng) articles[idx].title_eng = data.title_eng;
-                    if (data.title_ko) { articles[idx].title = data.title_ko; var h2 = document.querySelector('#result-' + idx + ' h2'); if (h2) h2.textContent = data.title_ko; }
+                    if (data.title_ko) { articles[idx].title = data.title_ko; var a2 = document.querySelector('#article-' + idx + ' h2 a'); if (a2) a2.textContent = data.title_ko; var st2 = document.querySelector('#summary-' + idx + ' .summary-title'); if (st2) st2.textContent = data.title_ko; }
                     var engSec = document.getElementById('summary-eng-section-' + idx);
                     if (engSec && (data.summary_eng || data.title_eng)) {
                         engSec.classList.remove('hidden');
@@ -1310,7 +1311,7 @@ HTML_TEMPLATE = """
             articles[idx].summary = data.summary;
             if (data.summary_eng) articles[idx].summary_eng = data.summary_eng;
             if (data.title_eng) articles[idx].title_eng = data.title_eng;
-            if (data.title_ko) { articles[idx].title = data.title_ko; var h2b = document.querySelector('#result-' + idx + ' h2'); if (h2b) h2b.textContent = data.title_ko; }
+            if (data.title_ko) { articles[idx].title = data.title_ko; var ab = document.querySelector('#article-' + idx + ' h2 a'); if (ab) ab.textContent = data.title_ko; var stb = document.querySelector('#summary-' + idx + ' .summary-title'); if (stb) stb.textContent = data.title_ko; }
             // 영문 요약 영역 표시
             var engSec2 = document.getElementById('summary-eng-section-' + idx);
             if (engSec2 && (data.summary_eng || data.title_eng)) {
@@ -1367,7 +1368,7 @@ HTML_TEMPLATE = """
             articles[idx].summary = data.summary;
             if (data.summary_eng) articles[idx].summary_eng = data.summary_eng;
             if (data.title_eng) articles[idx].title_eng = data.title_eng;
-            if (data.title_ko) { articles[idx].title = data.title_ko; var h2c = document.querySelector('#result-' + idx + ' h2'); if (h2c) h2c.textContent = data.title_ko; }
+            if (data.title_ko) { articles[idx].title = data.title_ko; var ac = document.querySelector('#article-' + idx + ' h2 a'); if (ac) ac.textContent = data.title_ko; var stc = document.querySelector('#summary-' + idx + ' .summary-title'); if (stc) stc.textContent = data.title_ko; }
             // 영문 요약 영역 표시
             var engSection = document.getElementById('summary-eng-section-' + idx);
             if (engSection && (data.summary_eng || data.title_eng)) {
