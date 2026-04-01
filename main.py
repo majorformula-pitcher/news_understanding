@@ -1646,9 +1646,9 @@ def generate_ppt(articles):
     def _to_bullet(line):
         """선행 . 을 • 글머리 기호로 변환"""
         if line.startswith('. '):
-            return '• ' + line[2:]
+            return '∙ ' + line[2:]
         if line.startswith('.'):
-            return '•' + line[1:]
+            return '∙' + line[1:]
         return line
 
     # 기사 1개씩 슬라이드에 배치 (위: 한국어 요약, 아래: 영문 요약)
