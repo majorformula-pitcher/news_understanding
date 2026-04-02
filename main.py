@@ -1863,7 +1863,7 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
         btn.disabled = true;
         btn.innerHTML = '<span class="btn-spinner"></span>수집 중...';
         isCollecting = true;
-        setCustomTabsDisabled(true);
+        try { setCustomTabsDisabled(true); } catch(e) {}
 
         // 업데이트 시작 시간 표시
         var now = new Date();
@@ -1922,13 +1922,13 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
             var delay = (finalData && finalData.errors && finalData.errors.length > 0) ? 6000 : 3000;
             setTimeout(() => {
                 isCollecting = false;
-                setCustomTabsDisabled(false);
+                try { setCustomTabsDisabled(false); } catch(e) {}
                 document.getElementById('collect-status').style.display = 'none';
                 renderDailyList();
             }, delay);
         } catch (e) {
             isCollecting = false;
-            setCustomTabsDisabled(false);
+            try { setCustomTabsDisabled(false); } catch(e2) {}
             spinner.className = 'collect-spinner done';
             statusText.textContent = '뉴스 수집 중 오류가 발생했습니다';
             statusSub.textContent = e.message || '알 수 없는 오류';
