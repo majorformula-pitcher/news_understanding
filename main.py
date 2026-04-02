@@ -174,6 +174,46 @@ def load_articles_by_publisher(publisher, order_by="published_at"):
         return []
 
 
+def save_custom_articles_to_db(articles, publisher=""):
+    """직접 입력-URL/본문 기사를 Supabase에 저장 (RSS 로직 없이 단순 저장)"""
+    global supabase_error
+    supabase_error = None
+    if not supabase:
+        return 0
+    saved = 0
+    for article in articles:
+        try:
+            row = {
+                "title": article.get("title", ""),
+                "content": article.get("body", ""),
+                "summary": article.get("summary", ""),
+                "url": article.get("link", ""),
+                "publisher": publisher,
+            }
+            # pub_date가 있으면 published_at에 저장, 실패해도 무시
+            pub_date = article.get("pub_date", "")
+            if pub_date:
+                row["published_at"] = pub_date
+            supabase.table("news-understanding").upsert(
+                row,
+                on_conflict="url",
+            ).execute()
+            saved += 1
+        except Exception as e:
+            # pub_date 형식 문제일 수 있으므로 published_at 없이 재시도
+            try:
+                row.pop("published_at", None)
+                supabase.table("news-understanding").upsert(
+                    row,
+                    on_conflict="url",
+                ).execute()
+                saved += 1
+            except Exception as e2:
+                supabase_error = f"DB 저장 오류: {e2}"
+                print(supabase_error)
+    return saved
+
+
 def update_article_summary(url, summary, summary_eng="", title_eng="", title_ko=""):
     """기사 URL로 summary 컬럼 업데이트"""
     if not supabase:
@@ -2058,7 +2098,10 @@ async def api_summarize(request: Request):
     if summary and link:
         updated = update_article_summary(link, summary, summary_eng, title_eng, title_ko)
         if not updated:
-            save_articles_to_db([{"title": title, "body": body, "link": link, "summary": summary}], publisher=publisher)
+            if publisher.startswith("직접 입력"):
+                save_custom_articles_to_db([{"title": title, "body": body, "link": link, "summary": summary}], publisher=publisher)
+            else:
+                save_articles_to_db([{"title": title, "body": body, "link": link, "summary": summary}], publisher=publisher)
             if summary_eng:
                 update_article_summary(link, summary, summary_eng, title_eng, title_ko)
     return JSONResponse({"summary": summary, "summary_eng": summary_eng, "title_eng": title_eng, "title_ko": title_ko})
@@ -2110,12 +2153,12 @@ async def api_fetch_urls(request: Request):
 
 @app.post("/api/save-custom-articles")
 async def api_save_custom_articles(request: Request):
-    """직접 입력 기사를 DB에 저장"""
+    """직접 입력-URL/본문 기사를 DB에 저장"""
     data = await request.json()
     articles = data.get("articles", [])
-    publisher = data.get("publisher", "직접 입력")
-    save_articles_to_db(articles, publisher=publisher)
-    return JSONResponse({"saved": len(articles)})
+    publisher = data.get("publisher", "직접 입력-URL")
+    saved = save_custom_articles_to_db(articles, publisher=publisher)
+    return JSONResponse({"saved": saved})
 
 
 @app.post("/api/daily-ppt")
