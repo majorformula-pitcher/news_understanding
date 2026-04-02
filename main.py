@@ -903,15 +903,9 @@ HTML_TEMPLATE = """
         {% endfor %}
         <a href="javascript:void(0)"
            class="feed-tab"
-           onclick="showCustomUrl()"
-           data-feed-idx="custom-url">
-            직접 입력-URL
-        </a>
-        <a href="javascript:void(0)"
-           class="feed-tab"
-           onclick="showCustomManual()"
-           data-feed-idx="custom-manual">
-            직접 입력-본문
+           onclick="showCustomInput()"
+           data-feed-idx="custom">
+            직접 입력
         </a>
     </nav>
 
@@ -931,36 +925,19 @@ HTML_TEMPLATE = """
         <!-- 피드 기사 목록 (JS로 렌더링) -->
         <div id="feed-articles"></div>
 
-        <!-- 직접 입력-URL 섹션 -->
-        <div id="custom-url-section" style="display:none;">
+        <!-- 직접 입력 섹션 -->
+        <div id="custom-section" style="display:none;">
             <div class="content-header">
-                <h1>직접 입력-URL</h1>
+                <h1>직접 입력</h1>
             </div>
             <div style="padding:20px 0;">
                 <p style="color:#888;font-size:14px;margin-bottom:12px;">뉴스 URL을 한 줄에 하나씩 입력하세요 (최대 20개)</p>
-                <textarea id="custom-urls" rows="6" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box;" placeholder="https://example.com/news/article1">https://themiilk.com/articles/abd29aa0c?u=12eaa86b&amp;t=a76a9d1d7&amp;from=</textarea>
+                <textarea id="custom-urls" rows="6" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box;" placeholder="https://example.com/news/article1&#10;https://example.com/news/article2">https://themiilk.com/articles/aeaf8dcc6?u=12eaa86b&amp;t=ab2139228&amp;from=</textarea>
                 <div style="margin-top:12px;display:flex;gap:10px;">
-                    <button class="summarize-btn" onclick="fetchCustomUrls()" id="custom-fetch-btn" style="padding:12px 24px;font-size:15px;">URL에서 기사 가져오기</button>
+                    <button class="summarize-btn" onclick="fetchCustomUrls()" id="custom-fetch-btn" style="padding:12px 24px;font-size:15px;">기사 가져오기</button>
                 </div>
             </div>
-            <div id="custom-url-articles"></div>
-        </div>
-
-        <!-- 직접 입력-본문 섹션 -->
-        <div id="custom-manual-section" style="display:none;">
-            <div class="content-header">
-                <h1>직접 입력-본문</h1>
-            </div>
-            <div style="padding:20px 0;">
-                <p style="color:#888;font-size:14px;margin-bottom:12px;">뉴스 제목과 본문을 직접 입력하세요</p>
-                <input id="manual-title" type="text" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;" placeholder="뉴스 제목">
-                <textarea id="manual-body" rows="10" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box;" placeholder="뉴스 본문 내용을 붙여넣으세요"></textarea>
-                <input id="manual-url" type="text" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;margin-top:8px;" placeholder="원문 URL (선택사항)">
-                <div style="margin-top:12px;display:flex;gap:10px;">
-                    <button class="summarize-btn" onclick="addManualArticle()" id="manual-add-btn" style="padding:12px 24px;font-size:15px;">기사 추가</button>
-                </div>
-            </div>
-            <div id="custom-manual-articles"></div>
+            <div id="custom-articles"></div>
         </div>
 
         <!-- Home / Daily News -->
@@ -1015,13 +992,11 @@ HTML_TEMPLATE = """
             const h = String(kst.getUTCHours()).padStart(2, '0');
             const min = String(kst.getUTCMinutes()).padStart(2, '0');
             return y + '.' + m + '.' + day + ' ' + h + ':' + min;
-        } catch (e) { return raw; }
+        } catch { return raw; }
     }
 
     // 현재 로드된 기사 배열 (피드별로 갱신됨)
     let articles = [];
-    let manualArticles = [];
-    let customUrlArticles = [];
     let currentFeedName = '';
     let newsCollected = true;
 
@@ -1029,15 +1004,6 @@ HTML_TEMPLATE = """
     function escapeHtml(str) {
         if (!str) return '';
         return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    }
-
-    function extractPublisher(url) {
-        if (!url) return '직접 입력';
-        try {
-            var host = new URL(url).hostname.replace('www.', '');
-            var name = host.split('.')[0];
-            return name.charAt(0).toUpperCase() + name.slice(1);
-        } catch (e) { return '직접 입력'; }
     }
 
     // Daily News 관리 (DB 기반)
@@ -1065,18 +1031,15 @@ HTML_TEMPLATE = """
         document.getElementById('feed-header').style.display = 'none';
         document.getElementById('feed-articles').innerHTML = '';
         document.getElementById('home-section').style.display = 'none';
-        document.getElementById('custom-url-section').style.display = 'none';
-        document.getElementById('custom-manual-section').style.display = 'none';
+        document.getElementById('custom-section').style.display = 'none';
         document.getElementById('loading').style.display = 'none';
 
         if (section === 'home' || section === 'collect') {
             document.getElementById('home-section').style.display = '';
         } else if (section === 'feed') {
             document.getElementById('feed-header').style.display = '';
-        } else if (section === 'custom-url') {
-            document.getElementById('custom-url-section').style.display = '';
-        } else if (section === 'custom-manual') {
-            document.getElementById('custom-manual-section').style.display = '';
+        } else if (section === 'custom') {
+            document.getElementById('custom-section').style.display = '';
         }
 
         // collect-status는 isCollecting 상태에 따라 표시
@@ -1094,18 +1057,11 @@ HTML_TEMPLATE = """
         }
     }
 
-    // 직접 입력-URL 탭 클릭
-    function showCustomUrl() {
-        setActiveTab('custom-url');
+    // 직접 입력 탭 클릭
+    function showCustomInput() {
+        setActiveTab('custom');
         currentFeedName = '직접 입력';
-        showSection('custom-url');
-    }
-
-    // 직접 입력-본문 탭 클릭
-    function showCustomManual() {
-        setActiveTab('custom-manual');
-        currentFeedName = '직접 입력';
-        showSection('custom-manual');
+        showSection('custom');
     }
 
     // 직접 입력: URL에서 기사 가져오기
@@ -1121,7 +1077,7 @@ HTML_TEMPLATE = """
 
         btn.disabled = true;
         btn.textContent = '가져오는 중...';
-        document.getElementById('custom-url-articles').innerHTML = '<div class="loading-overlay" style="display:block;">기사를 가져오는 중입니다...</div>';
+        document.getElementById('custom-articles').innerHTML = '<div class="loading-overlay" style="display:block;">기사를 가져오는 중입니다...</div>';
 
         try {
             const res = await fetch('/api/fetch-urls', {
@@ -1130,99 +1086,75 @@ HTML_TEMPLATE = """
                 body: JSON.stringify({ urls: urls })
             });
             const data = await res.json();
-            customUrlArticles = (data.articles || []).map(a => ({
+            articles = (data.articles || []).map(a => ({
                 title: a.title,
                 body: a.body,
                 link: a.link,
                 summary: '',
                 pub_date: a.pub_date || '',
-                publisher: extractPublisher(a.link),
+                publisher: '직접 입력',
                 error: a.error,
                 paywall: a.paywall
             }));
-            renderCustomArticles('custom-url-articles', customUrlArticles, 'url');
+            // DB에 저장
+            if (articles.length > 0) {
+                const validArticles = articles.filter(a => !a.error);
+                if (validArticles.length > 0) {
+                    await fetch('/api/save-custom-articles', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ articles: validArticles, publisher: '직접 입력' })
+                    });
+                }
+            }
+            renderCustomArticles();
         } catch (e) {
-            document.getElementById('custom-url-articles').innerHTML = '<div class="error-msg">기사를 가져오는 중 오류가 발생했습니다.</div>';
+            document.getElementById('custom-articles').innerHTML = '<div class="error-msg">기사를 가져오는 중 오류가 발생했습니다.</div>';
         }
         btn.disabled = false;
-        btn.textContent = 'URL에서 기사 가져오기';
+        btn.textContent = '기사 가져오기';
     }
 
-    // 제목/본문 직접 입력으로 기사 추가
-    async function addManualArticle() {
-        const titleInput = document.getElementById('manual-title');
-        const bodyInput = document.getElementById('manual-body');
-        const urlInput = document.getElementById('manual-url');
-        const title = titleInput.value.trim();
-        const body = bodyInput.value.trim();
-        const link = urlInput.value.trim() || ('manual://' + Date.now() + '-' + Math.random().toString(36).slice(2));
-
-        if (!title) { alert('제목을 입력해주세요.'); return; }
-        if (!body) { alert('본문을 입력해주세요.'); return; }
-
-        const newArticle = {
-            title: title,
-            body: body,
-            link: link,
-            summary: '',
-            pub_date: '',
-            publisher: extractPublisher(urlInput.value.trim()),
-            error: false,
-            paywall: false
-        };
-        manualArticles.push(newArticle);
-        renderCustomArticles('custom-manual-articles', manualArticles, 'manual');
-        // 입력 필드 초기화
-        titleInput.value = '';
-        bodyInput.value = '';
-        urlInput.value = '';
-    }
-
-    // 직접 입력 기사 렌더링 (피드 기사와 별도 ID/함수 사용)
-    function renderCustomArticles(containerId, articleList, listType) {
-        const container = document.getElementById(containerId);
-        const list = articleList;
-        const prefix = listType === 'manual' ? 'manual-article' : 'custom-article';
-        if (list.length === 0) {
+    // 직접 입력 기사 렌더링 (피드 기사와 동일한 형태)
+    function renderCustomArticles() {
+        const container = document.getElementById('custom-articles');
+        if (articles.length === 0) {
             container.innerHTML = '<div class="empty-state">가져온 기사가 없습니다.</div>';
             return;
         }
 
-        container.innerHTML = list.map((a, i) => {
+        container.innerHTML = articles.map((a, i) => {
             if (a.error) {
                 return '<div class="result-item" style="opacity:0.6;">' +
-                    '<h2><span>' + escapeHtml(a.link) + '</span></h2>' +
+                    '<h2><a href="' + escapeHtml(a.link) + '" target="_blank">' + escapeHtml(a.link) + '</a></h2>' +
                     '<p style="color:#e74c3c;">' + escapeHtml(a.body) + '</p>' +
-                    '<div class="btn-row">' +
-                        '<a href="' + escapeHtml(a.link) + '" target="_blank" class="original-btn">원문 보기</a>' +
-                    '</div>' +
                 '</div>';
             }
             const isSelected = a.is_daily;
             const hasSummary = a.summary && a.summary.trim().length > 0;
             const dateFormatted = formatPubDate(a.pub_date);
-            return '<div class="result-item" id="' + prefix + '-' + i + '">' +
+            return '<div class="result-item" id="article-' + i + '">' +
                 '<h2 style="display:flex;align-items:center;justify-content:space-between;gap:12px;">' +
-                    '<span style="flex:1;">' + escapeHtml(a.title) + '</span>' +
+                    '<a href="' + escapeHtml(a.link) + '" target="_blank" style="flex:1;">' + escapeHtml(a.title) + '</a>' +
                     (dateFormatted ? '<span class="article-date">' + dateFormatted + '</span>' : '') +
-                    '<button class="daily-btn' + (isSelected ? ' selected' : '') + '" onclick="selectCustomForDaily(' + i + ',\'' + listType + '\')" id="' + prefix + '-daily-btn-' + i + '">' + (isSelected ? '선택됨' : 'Daily News 로 선택') + '</button>' +
+                    '<button class="daily-btn' + (isSelected ? ' selected' : '') + '" onclick="selectForDaily(' + i + ')" id="daily-btn-' + i + '">' + (isSelected ? '선택됨' : 'Daily News 로 선택') + '</button>' +
                 '</h2>' +
                 '<div class="article-layout">' +
                     '<div class="article-body">' + escapeHtml(a.body) + '</div>' +
                     '<div class="summary-wrapper">' +
-                        '<div class="summary-section' + (hasSummary ? ' visible' : '') + '" id="' + prefix + '-summary-' + i + '">' +
+                        '<div class="summary-section' + (hasSummary ? ' visible' : '') + '" id="summary-' + i + '">' +
                             '<div class="summary-title">' + escapeHtml(a.title) + '</div>' +
                             '<div class="summary-content">' + (hasSummary ? escapeHtml(a.summary) : '') + '</div>' +
                         '</div>' +
-                        '<div class="summary-eng-section' + ((a.summary_eng || a.title_eng) ? '' : ' hidden') + '" id="' + prefix + '-eng-section-' + i + '">' +
+                        '<div class="summary-eng-section' + ((a.summary_eng || a.title_eng) ? '' : ' hidden') + '" id="summary-eng-section-' + i + '">' +
                             '<div class="summary-title">' + escapeHtml(a.title_eng || '') + '</div>' +
                             '<div class="summary-content">' + escapeHtml(a.summary_eng || '') + '</div>' +
                         '</div>' +
                     '</div>' +
                 '</div>' +
                 '<div class="btn-row">' +
-                    (a.link && !a.link.startsWith('manual://') ? '<a href="' + escapeHtml(a.link) + '" target="_blank" class="original-btn">원문 보기</a>' : '') +
-                    '<button class="summarize-btn" onclick="summarizeCustomArticle(' + i + ',\'' + listType + '\')" id="' + prefix + '-summarize-btn-' + i + '"' + (hasSummary ? ' disabled' : '') + '>' + (hasSummary ? '요약 완료' : '요약하기') + '</button>' +
+                    '<a href="' + escapeHtml(a.link) + '" target="_blank" class="original-btn">원문 보기</a>' +
+                    '<button class="summarize-btn" onclick="summarizeArticle(' + i + ')"' + (hasSummary ? ' disabled' : '') + '>' + (hasSummary ? '요약 완료' : '요약하기') + '</button>' +
                 '</div>' +
             '</div>';
         }).join('');
@@ -1261,7 +1193,7 @@ HTML_TEMPLATE = """
             const dateFormatted = formatPubDate(a.pub_date);
             return '<div class="result-item" id="article-' + i + '">' +
                 '<h2 style="display:flex;align-items:center;justify-content:space-between;gap:12px;">' +
-                    '<span style="flex:1;">' + escapeHtml(a.title) + '</span>' +
+                    '<a href="' + escapeHtml(a.link) + '" target="_blank" style="flex:1;">' + escapeHtml(a.title) + '</a>' +
                     (dateFormatted ? '<span class="article-date">' + dateFormatted + '</span>' : '') +
                     '<button class="daily-btn' + (isSelected ? ' selected' : '') + '" onclick="selectForDaily(' + i + ')" id="daily-btn-' + i + '">' + (isSelected ? '선택됨' : 'Daily News 로 선택') + '</button>' +
                 '</h2>' +
@@ -1286,7 +1218,7 @@ HTML_TEMPLATE = """
         }).join('');
     }
 
-    // Daily News 로 선택 버튼 클릭 (토글) — 피드 기사용
+    // Daily News 로 선택 버튼 클릭 (토글)
     async function selectForDaily(idx) {
         const btn = document.getElementById('daily-btn-' + idx);
         const article = articles[idx];
@@ -1407,177 +1339,6 @@ HTML_TEMPLATE = """
         } catch (e) {
             contentDiv.textContent = '요약 중 오류가 발생했습니다.';
             btn.textContent = 'Daily News 로 선택';
-            btn.disabled = false;
-        }
-    }
-
-    // 직접 입력 기사 전용: Daily News 로 선택 (DB 저장 + 요약 + 토글)
-    async function selectCustomForDaily(idx, listType) {
-        const list = listType === 'manual' ? manualArticles : customUrlArticles;
-        const prefix = listType === 'manual' ? 'manual-article' : 'custom-article';
-        const btn = document.getElementById(prefix + '-daily-btn-' + idx);
-        const article = list[idx];
-        const summaryDiv = document.getElementById(prefix + '-summary-' + idx);
-        const contentDiv = summaryDiv.querySelector('.summary-content');
-        const publisher = extractPublisher(article.link);
-
-        // 이미 선택된 경우 → 선택 해제
-        if (article.is_daily) {
-            btn.disabled = true;
-            btn.textContent = '해제 중...';
-            try {
-                await fetch('/api/toggle-daily', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ link: article.link, is_daily: false })
-                });
-                list[idx].is_daily = false;
-                btn.textContent = 'Daily News 로 선택';
-                btn.classList.remove('selected');
-                await loadDailyNewsFromDB();
-                renderDailyList();
-            } catch (e) {
-                btn.textContent = '선택됨';
-            }
-            btn.disabled = false;
-            return;
-        }
-
-        btn.disabled = true;
-        btn.textContent = 'DB 저장 중...';
-
-        // 1. DB에 기사 저장
-        try {
-            await fetch('/api/save-custom-articles', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ articles: [article], publisher: publisher })
-            });
-        } catch (e) {
-            btn.textContent = 'Daily News 로 선택';
-            btn.disabled = false;
-            alert('DB 저장에 실패했습니다.');
-            return;
-        }
-
-        // 2. 요약
-        const existingSummary = (article.summary && article.summary.trim().length > 0) ? article.summary :
-            (summaryDiv.classList.contains('visible') ? contentDiv.textContent : null);
-
-        if (existingSummary && existingSummary !== 'AI가 요약하는 중입니다...' && existingSummary !== '요약 중 오류가 발생했습니다.') {
-            if (!article.summary_eng) {
-                btn.textContent = '영문 요약 중...';
-                try {
-                    const res = await fetch('/api/summarize', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ title: article.title, body: article.body, link: article.link, publisher: publisher })
-                    });
-                    const data = await res.json();
-                    if (data.summary) { list[idx].summary = data.summary; var cd = summaryDiv.querySelector('.summary-content'); if (cd) cd.textContent = data.summary; }
-                    if (data.summary_eng) list[idx].summary_eng = data.summary_eng;
-                    if (data.title_eng) list[idx].title_eng = data.title_eng;
-                    if (data.title_ko) { list[idx].title = data.title_ko; }
-                    var engSec = document.getElementById(prefix + '-eng-section-' + idx);
-                    if (engSec && (data.summary_eng || data.title_eng)) {
-                        engSec.classList.remove('hidden');
-                        engSec.querySelector('.summary-title').textContent = data.title_eng || '';
-                        engSec.querySelector('.summary-content').textContent = data.summary_eng || '';
-                    }
-                } catch (e) {}
-            }
-        } else {
-            btn.textContent = '요약 중...';
-            summaryDiv.classList.add('visible');
-            contentDiv.textContent = 'AI가 요약하는 중입니다...';
-            try {
-                const res = await fetch('/api/summarize', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ title: article.title, body: article.body, link: article.link, publisher: publisher })
-                });
-                const data = await res.json();
-                contentDiv.textContent = data.summary;
-                list[idx].summary = data.summary;
-                if (data.summary_eng) list[idx].summary_eng = data.summary_eng;
-                if (data.title_eng) list[idx].title_eng = data.title_eng;
-                if (data.title_ko) { list[idx].title = data.title_ko; }
-                var engSec2 = document.getElementById(prefix + '-eng-section-' + idx);
-                if (engSec2 && (data.summary_eng || data.title_eng)) {
-                    engSec2.classList.remove('hidden');
-                    engSec2.querySelector('.summary-title').textContent = data.title_eng || '';
-                    engSec2.querySelector('.summary-content').textContent = data.summary_eng || '';
-                }
-            } catch (e) {
-                contentDiv.textContent = '요약 중 오류가 발생했습니다.';
-                btn.textContent = 'Daily News 로 선택';
-                btn.disabled = false;
-                return;
-            }
-        }
-
-        // 3. is_daily 토글
-        btn.textContent = '선택 중...';
-        try {
-            await fetch('/api/toggle-daily', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ link: article.link, is_daily: true })
-            });
-            list[idx].is_daily = true;
-            btn.textContent = '선택됨';
-            btn.classList.add('selected');
-            await loadDailyNewsFromDB();
-            renderDailyList();
-        } catch (e) {
-            btn.textContent = 'Daily News 로 선택';
-        }
-        btn.disabled = false;
-    }
-
-    // 직접 입력 기사 전용: 요약하기
-    async function summarizeCustomArticle(idx, listType) {
-        const list = listType === 'manual' ? manualArticles : customUrlArticles;
-        const prefix = listType === 'manual' ? 'manual-article' : 'custom-article';
-        const article = list[idx];
-        const publisher = extractPublisher(article.link);
-        const summaryDiv = document.getElementById(prefix + '-summary-' + idx);
-        const contentDiv = summaryDiv.querySelector('.summary-content');
-        const btn = document.getElementById(prefix + '-summarize-btn-' + idx);
-
-        btn.disabled = true;
-        btn.textContent = '요약 중...';
-        summaryDiv.classList.add('visible');
-        contentDiv.textContent = 'AI가 요약하는 중입니다...';
-
-        try {
-            // DB에 먼저 저장
-            await fetch('/api/save-custom-articles', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ articles: [article], publisher: publisher })
-            });
-            const res = await fetch('/api/summarize', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: article.title, body: article.body, link: article.link, publisher: publisher })
-            });
-            const data = await res.json();
-            contentDiv.textContent = data.summary;
-            btn.textContent = '요약 완료';
-            list[idx].summary = data.summary;
-            if (data.summary_eng) list[idx].summary_eng = data.summary_eng;
-            if (data.title_eng) list[idx].title_eng = data.title_eng;
-            if (data.title_ko) { list[idx].title = data.title_ko; }
-            var engSection = document.getElementById(prefix + '-eng-section-' + idx);
-            if (engSection && (data.summary_eng || data.title_eng)) {
-                engSection.classList.remove('hidden');
-                engSection.querySelector('.summary-title').textContent = data.title_eng || '';
-                engSection.querySelector('.summary-content').textContent = data.summary_eng || '';
-            }
-        } catch (e) {
-            contentDiv.textContent = '요약 중 오류가 발생했습니다.';
-            btn.textContent = '요약하기';
             btn.disabled = false;
         }
     }
@@ -1821,26 +1582,12 @@ HTML_TEMPLATE = """
         }
     }
 
-    // 직접 입력 탭 비활성화/활성화
-    function setCustomTabsDisabled(disabled) {
-        document.querySelectorAll('.feed-tab[data-feed-idx="custom-url"], .feed-tab[data-feed-idx="custom-manual"]').forEach(function(tab) {
-            if (disabled) {
-                tab.style.pointerEvents = 'none';
-                tab.style.opacity = '0.4';
-            } else {
-                tab.style.pointerEvents = '';
-                tab.style.opacity = '';
-            }
-        });
-    }
-
     // 뉴스 업데이트 버튼 클릭
     async function collectNews() {
         const btn = document.getElementById('collect-btn');
         btn.disabled = true;
         btn.innerHTML = '<span class="btn-spinner"></span>수집 중...';
         isCollecting = true;
-        try { setCustomTabsDisabled(true); } catch(e) {}
 
         // 업데이트 시작 시간 표시
         var now = new Date();
@@ -1899,13 +1646,11 @@ HTML_TEMPLATE = """
             var delay = (finalData && finalData.errors && finalData.errors.length > 0) ? 6000 : 3000;
             setTimeout(() => {
                 isCollecting = false;
-                try { setCustomTabsDisabled(false); } catch(e) {}
                 document.getElementById('collect-status').style.display = 'none';
                 renderDailyList();
             }, delay);
         } catch (e) {
             isCollecting = false;
-            try { setCustomTabsDisabled(false); } catch(e2) {}
             spinner.className = 'collect-spinner done';
             statusText.textContent = '뉴스 수집 중 오류가 발생했습니다';
             statusSub.textContent = e.message || '알 수 없는 오류';
@@ -1922,11 +1667,6 @@ HTML_TEMPLATE = """
         await loadDailyNewsFromDB();
         renderDailyList();
     });
-
-    // 초기화: 기본값 설정
-    document.getElementById('manual-title').value = 'Anthropic Predicts Demand for Cowork Agent to Dwarf Claude Code';
-    document.getElementById('manual-body').value = "A top Anthropic PBC executive expects the company\\x27s general-purpose artificial intelligence agent, Cowork, to reach a wider market than Claude Code, the hit product that helped turn the startup into an AI juggernaut.\\n\\nAnthropic has seen stronger adoption for Cowork \\x22in the first few weeks\\x22 than it did in a comparable period for Claude Code a year ago, Chief Commercial Officer Paul Smith said in an interview on Wednesday. Smith said the average large company has somewhere between 2% and 5% of its staff working in engineering. Cowork, he said, is more likely to appeal to \\x22the rest of us.\\x22\\n\\nCowork was released as a \\x22research preview\\x22 product earlier this year and quickly made a splash online. Unlike with Claude Code, a similar AI agent for programming, Cowork does not require users to run a terminal and type in a command line. It\\x27s also meant to tackle a broader range of tasks, potentially appealing to a bigger audience.\\n\\nAnthropic has emerged as an AI leader and a fierce competitor of OpenAI in large part due to Claude Code, which the company recently said generates more than $2 billion in annualized revenue. With products like Cowork, Anthropic aims to help streamline a wider range of work tasks and replicate the success it\\x27s had with software developers.\\nAt the same time, Anthropic is competing with the likes of OpenAI and Alphabet Inc.\\x27s Google to build more advanced AI systems to power agents and other software. In the wide-ranging interview, Smith said he expects the rate of releases to accelerate.\\n\\n\\x22I think the pace of innovation is going to increase,\\x22 he said. \\x22It is a reasonably safe bet to assume that model releases will keep coming, and if anything, they will keep coming with more frequency.\\x22\\n\\nMoving faster comes with challenges, however. Smith said the recent accidental release of the source code behind Claude Code was the result of \\x22process errors\\x22 related to the startup\\x27s fast product release cycle.\\n\\nThe leak was \\x22absolutely not breaches or hacks,\\x22 he said, and the mistakes have been addressed. \\x22They\\x27re part of the incredibly rapid release cycle that we\\x27ve had around Claude Code,\\x22 he added.\\n\\nThe exposure hits at a delicate moment for the company. Anthropic is currently in a legal battle with the US government over the Pentagon\\x27s decision to declare it a supply-chain risk following a standoff over AI safety guardrails. The company has warned that the labeling could cost it billions in lost revenue.\\n\\nStill, Smith said some customers respect that Anthropic \\x22demonstrates its principles\\x22 in its dealings with the US government.\\n\\nAs Anthropic battles the Pentagon, it\\x27s also pushing ahead with plans to go public as soon as this year, Bloomberg News has reported. Smith declined to comment on the timeline for an initial public offering, but said Anthropic is \\x22very comfortable that we\\x27re on the right path from gross margin targets and the previous profitability targets that we\\x27ve stated.\\x22\\n\\nFor now, the company has a sizable war chest after finalizing a $30 billion funding round in February that can be used to spend on the costly chips, data centers and talent needed to compete in the global AI race.\\n\\n\\x22We\\x27re very comfortable with our funding situation after the recent round that we concluded,\\x22 he said.";
-    document.getElementById('manual-url').value = 'https://www.bloomberg.com/news/articles/2026-04-01/anthropic-executive-sees-cowork-agent-as-bigger-than-claude-code?srnd=phx-technology';
 
     // 초기화: 홈 화면 표시
     showSection('home');
