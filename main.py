@@ -903,9 +903,15 @@ HTML_TEMPLATE = """
         {% endfor %}
         <a href="javascript:void(0)"
            class="feed-tab"
-           onclick="showCustomInput()"
-           data-feed-idx="custom">
-            직접 입력
+           onclick="showCustomUrl()"
+           data-feed-idx="custom-url">
+            직접 입력-URL
+        </a>
+        <a href="javascript:void(0)"
+           class="feed-tab"
+           onclick="showCustomManual()"
+           data-feed-idx="custom-manual">
+            직접 입력-본문
         </a>
     </nav>
 
@@ -925,30 +931,36 @@ HTML_TEMPLATE = """
         <!-- 피드 기사 목록 (JS로 렌더링) -->
         <div id="feed-articles"></div>
 
-        <!-- 직접 입력 섹션 -->
-        <div id="custom-section" style="display:none;">
+        <!-- 직접 입력-URL 섹션 -->
+        <div id="custom-url-section" style="display:none;">
             <div class="content-header">
-                <h1>직접 입력</h1>
+                <h1>직접 입력-URL</h1>
             </div>
-            <!-- URL 입력 -->
-            <div style="padding:20px 0 10px;">
+            <div style="padding:20px 0;">
                 <p style="color:#888;font-size:14px;margin-bottom:12px;">뉴스 URL을 한 줄에 하나씩 입력하세요 (최대 20개)</p>
-                <textarea id="custom-urls" rows="4" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box;" placeholder="https://example.com/news/article1&#10;https://example.com/news/article2"></textarea>
+                <textarea id="custom-urls" rows="6" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box;" placeholder="https://example.com/news/article1&#10;https://example.com/news/article2"></textarea>
                 <div style="margin-top:12px;display:flex;gap:10px;">
                     <button class="summarize-btn" onclick="fetchCustomUrls()" id="custom-fetch-btn" style="padding:12px 24px;font-size:15px;">URL에서 기사 가져오기</button>
                 </div>
             </div>
-            <!-- 제목/본문 직접 입력 -->
-            <div style="padding:10px 0 20px;border-top:1px solid #eee;margin-top:10px;">
-                <p style="color:#888;font-size:14px;margin-bottom:12px;">또는 제목과 본문을 직접 입력하세요</p>
+            <div id="custom-url-articles"></div>
+        </div>
+
+        <!-- 직접 입력-본문 섹션 -->
+        <div id="custom-manual-section" style="display:none;">
+            <div class="content-header">
+                <h1>직접 입력-본문</h1>
+            </div>
+            <div style="padding:20px 0;">
+                <p style="color:#888;font-size:14px;margin-bottom:12px;">뉴스 제목과 본문을 직접 입력하세요</p>
                 <input id="manual-title" type="text" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;" placeholder="뉴스 제목">
-                <textarea id="manual-body" rows="8" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box;" placeholder="뉴스 본문 내용을 붙여넣으세요"></textarea>
+                <textarea id="manual-body" rows="10" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box;" placeholder="뉴스 본문 내용을 붙여넣으세요"></textarea>
                 <input id="manual-url" type="text" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;margin-top:8px;" placeholder="원문 URL (선택사항)">
                 <div style="margin-top:12px;display:flex;gap:10px;">
                     <button class="summarize-btn" onclick="addManualArticle()" id="manual-add-btn" style="padding:12px 24px;font-size:15px;">기사 추가</button>
                 </div>
             </div>
-            <div id="custom-articles"></div>
+            <div id="custom-manual-articles"></div>
         </div>
 
         <!-- Home / Daily News -->
@@ -1042,15 +1054,18 @@ HTML_TEMPLATE = """
         document.getElementById('feed-header').style.display = 'none';
         document.getElementById('feed-articles').innerHTML = '';
         document.getElementById('home-section').style.display = 'none';
-        document.getElementById('custom-section').style.display = 'none';
+        document.getElementById('custom-url-section').style.display = 'none';
+        document.getElementById('custom-manual-section').style.display = 'none';
         document.getElementById('loading').style.display = 'none';
 
         if (section === 'home' || section === 'collect') {
             document.getElementById('home-section').style.display = '';
         } else if (section === 'feed') {
             document.getElementById('feed-header').style.display = '';
-        } else if (section === 'custom') {
-            document.getElementById('custom-section').style.display = '';
+        } else if (section === 'custom-url') {
+            document.getElementById('custom-url-section').style.display = '';
+        } else if (section === 'custom-manual') {
+            document.getElementById('custom-manual-section').style.display = '';
         }
 
         // collect-status는 isCollecting 상태에 따라 표시
@@ -1068,11 +1083,18 @@ HTML_TEMPLATE = """
         }
     }
 
-    // 직접 입력 탭 클릭
-    function showCustomInput() {
-        setActiveTab('custom');
+    // 직접 입력-URL 탭 클릭
+    function showCustomUrl() {
+        setActiveTab('custom-url');
         currentFeedName = '직접 입력';
-        showSection('custom');
+        showSection('custom-url');
+    }
+
+    // 직접 입력-본문 탭 클릭
+    function showCustomManual() {
+        setActiveTab('custom-manual');
+        currentFeedName = '직접 입력';
+        showSection('custom-manual');
     }
 
     // 직접 입력: URL에서 기사 가져오기
@@ -1088,7 +1110,7 @@ HTML_TEMPLATE = """
 
         btn.disabled = true;
         btn.textContent = '가져오는 중...';
-        document.getElementById('custom-articles').innerHTML = '<div class="loading-overlay" style="display:block;">기사를 가져오는 중입니다...</div>';
+        document.getElementById('custom-url-articles').innerHTML = '<div class="loading-overlay" style="display:block;">기사를 가져오는 중입니다...</div>';
 
         try {
             const res = await fetch('/api/fetch-urls', {
@@ -1118,9 +1140,9 @@ HTML_TEMPLATE = """
                     });
                 }
             }
-            renderCustomArticles();
+            renderCustomArticles('custom-url-articles');
         } catch (e) {
-            document.getElementById('custom-articles').innerHTML = '<div class="error-msg">기사를 가져오는 중 오류가 발생했습니다.</div>';
+            document.getElementById('custom-url-articles').innerHTML = '<div class="error-msg">기사를 가져오는 중 오류가 발생했습니다.</div>';
         }
         btn.disabled = false;
         btn.textContent = 'URL에서 기사 가져오기';
@@ -1159,7 +1181,7 @@ HTML_TEMPLATE = """
             });
         } catch (e) {}
 
-        renderCustomArticles();
+        renderCustomArticles('custom-manual-articles');
         // 입력 필드 초기화
         titleInput.value = '';
         bodyInput.value = '';
@@ -1167,8 +1189,8 @@ HTML_TEMPLATE = """
     }
 
     // 직접 입력 기사 렌더링 (피드 기사와 동일한 형태)
-    function renderCustomArticles() {
-        const container = document.getElementById('custom-articles');
+    function renderCustomArticles(containerId) {
+        const container = document.getElementById(containerId || 'custom-url-articles');
         if (articles.length === 0) {
             container.innerHTML = '<div class="empty-state">가져온 기사가 없습니다.</div>';
             return;
