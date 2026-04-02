@@ -75,8 +75,17 @@ def save_articles_to_db(articles, publisher=""):
         return
     for article in articles:
         try:
+            # 제목 끝에 붙은 " - 출처명" 제거 (RSS 피드에서 자동 추가되는 출처)
+            clean_title = article["title"]
+            for feed in RSS_FEEDS:
+                # 피드 이름에서 "-카테고리" 부분 제거하여 출처명 추출 (e.g. "로봇신문-AI" → "로봇신문")
+                source_name = feed["name"].split("-")[0].strip()
+                suffix = f" - {source_name}"
+                if clean_title.endswith(suffix):
+                    clean_title = clean_title[:-len(suffix)].strip()
+                    break
             row = {
-                "title": article["title"],
+                "title": clean_title,
                 "content": article["body"],
                 "summary": article.get("summary", ""),
                 "url": article["link"],
