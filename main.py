@@ -1794,7 +1794,7 @@ def generate_ppt(articles):
         p_title = title_cell.text_frame.paragraphs[0]
         p_title.text = title_text
         p_title.font.name = FONT_NAME
-        p_title.font.size = Pt(13)
+        p_title.font.size = Pt(10)
         p_title.font.bold = True
         p_title.font.underline = True
         p_title.font.color.rgb = title_color
@@ -1819,10 +1819,10 @@ def generate_ppt(articles):
                 p = summary_cell.text_frame.add_paragraph()
             p.text = _to_bullet(line)
             p.font.name = FONT_NAME
-            p.font.size = Pt(13)
+            p.font.size = Pt(7)
             p.font.color.rgb = font_color
-            p.line_spacing = Pt(20)
-            p.space_before = Pt(3)
+            p.line_spacing = Pt(11)
+            p.space_before = Pt(2)
 
         # Row 1, Col 1: 이미지 셀 (이미지를 셀 위에 겹쳐서 배치)
         if has_image:
