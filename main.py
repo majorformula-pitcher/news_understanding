@@ -1679,13 +1679,13 @@ HTML_TEMPLATE = """
 def generate_ppt(articles):
     """뉴스 요약을 PPT로 생성 (슬라이드 1장당 1개 기사: 한글+영문)"""
     prs = Presentation()
-    prs.slide_width = Inches(13.333)
-    prs.slide_height = Inches(7.5)
+    prs.slide_width = Cm(14.001)
+    prs.slide_height = Cm(6.002)
     FONT_NAME = 'SamsungOne 700'
 
     # 타이틀 슬라이드
     slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank
-    txBox = slide.shapes.add_textbox(Inches(0.5), Inches(2.5), Inches(12.3), Inches(2))
+    txBox = slide.shapes.add_textbox(Cm(0.5), Cm(1.5), Cm(13.0), Cm(2.5))
     tf = txBox.text_frame
     tf.word_wrap = True
     p = tf.paragraphs[0]
@@ -1736,13 +1736,13 @@ def generate_ppt(articles):
             pass
         return None
 
-    IMG_SIZE = Cm(5)  # 5cm x 5cm
-    IMG_COL_WIDTH = Cm(5.5)  # 이미지 컬럼 (이미지 + 여백)
-    TABLE_LEFT = Inches(0.5)
-    TABLE_TOP = Inches(0.3)
-    TABLE_WIDTH = Inches(12.3)
-    TABLE_HEIGHT = Inches(6.5)
-    TITLE_ROW_HEIGHT = Inches(1.0)
+    IMG_SIZE = Cm(2)  # 2cm x 2cm (슬라이드 크기에 맞춤)
+    IMG_COL_WIDTH = Cm(2.3)  # 이미지 컬럼 (이미지 + 여백)
+    TABLE_LEFT = Cm(0.5)
+    TABLE_TOP = Cm(0.2)
+    TABLE_WIDTH = Cm(13.0)
+    TABLE_HEIGHT = Cm(5.6)
+    TITLE_ROW_HEIGHT = Cm(0.8)
     BODY_ROW_HEIGHT = TABLE_HEIGHT - TITLE_ROW_HEIGHT
 
     def _set_cell_font(cell, text, font_name, font_size, bold=False, color=None):
@@ -1763,7 +1763,7 @@ def generate_ppt(articles):
 
         slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank
         font_color = RGBColor(0, 0, 0)
-        title_color = RGBColor(0, 51, 153)
+        title_color = RGBColor(2, 44, 178)
         has_image = image_data is not None
 
         # 표 생성: 2행 x 2열
@@ -1833,16 +1833,27 @@ def generate_ppt(articles):
             image_data.seek(0)
             img_left = TABLE_LEFT + int(table.columns[0].width) + (IMG_COL_WIDTH - IMG_SIZE) // 2
             img_top = TABLE_TOP + TITLE_ROW_HEIGHT + (BODY_ROW_HEIGHT - IMG_SIZE) // 2
-            slide.shapes.add_picture(image_data, img_left, img_top, IMG_SIZE, IMG_SIZE)
+            pic = slide.shapes.add_picture(image_data, img_left, img_top, IMG_SIZE, IMG_SIZE)
+            # 이미지 모서리 둥글게 (roundRect, adj=16667 = 1/6)
+            spPr = pic._element.spPr
+            prstGeom = spPr.find(qn('a:prstGeom'))
+            if prstGeom is not None:
+                spPr.remove(prstGeom)
+            prstGeom = spPr.makeelement(qn('a:prstGeom'), {'prst': 'roundRect'})
+            avLst = prstGeom.makeelement(qn('a:avLst'), {})
+            gd = avLst.makeelement(qn('a:gd'), {'name': 'adj', 'fmla': 'val 16667'})
+            avLst.append(gd)
+            prstGeom.append(avLst)
+            spPr.append(prstGeom)
 
-        # 표 테두리를 배경색(E6E6E6)과 동일하게 설정하여 안 보이게 처리
+        # 표 테두리 완전 제거 (noFill)
         tbl = table._tbl
         tblPr = tbl.tblPr
         # tblStyle 제거 (기본 테마 테두리 방지)
         tblStyleId = tblPr.find(qn('a:tblStyleId'))
         if tblStyleId is not None:
             tblPr.remove(tblStyleId)
-        # 개별 셀 테두리: 배경색과 동일한 색상으로 설정
+        # 개별 셀 테두리: noFill로 설정하여 완전히 안 보이게 처리
         for row_idx in range(len(table.rows)):
             for col_idx in range(cols):
                 cell = table.cell(row_idx, col_idx)
@@ -1852,11 +1863,9 @@ def generate_ppt(articles):
                     border = tcPr.find(qn(border_name))
                     if border is not None:
                         tcPr.remove(border)
-                    ln = tcPr.makeelement(qn(border_name), {'w': '3175'})
-                    solidFill = ln.makeelement(qn('a:solidFill'), {})
-                    srgbClr = solidFill.makeelement(qn('a:srgbClr'), {'val': 'E6E6E6'})
-                    solidFill.append(srgbClr)
-                    ln.append(solidFill)
+                    ln = tcPr.makeelement(qn(border_name), {'w': '0'})
+                    noFill = ln.makeelement(qn('a:noFill'), {})
+                    ln.append(noFill)
                     tcPr.append(ln)
 
         # URL을 슬라이드 노트에 추가
