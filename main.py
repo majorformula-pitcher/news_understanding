@@ -129,7 +129,7 @@ def load_all_articles():
         print(f"DB 전체 조회 오류: {e}")
         return []
 
-def load_articles_by_publisher(publisher):
+def load_articles_by_publisher(publisher, order_by="published_at"):
     """Supabase에서 특정 제공자의 기사 목록 조회"""
     global supabase_error
     supabase_error = None
@@ -144,7 +144,7 @@ def load_articles_by_publisher(publisher):
                 supabase.table("news-understanding")
                 .select("*")
                 .eq("publisher", publisher)
-                .order("published_at", desc=True)
+                .order(order_by, desc=True)
                 .range(offset, offset + batch_size - 1)
                 .execute()
             )
@@ -964,33 +964,12 @@ HTML_TEMPLATE = """
                 <p style="color:#888;font-size:14px;margin-bottom:12px;">뉴스 제목과 본문을 직접 입력하세요</p>
                 <input id="manual-title" type="text" style="width:50%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;" placeholder="뉴스 제목">
                 <textarea id="manual-body" rows="10" style="width:50%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box;" placeholder="뉴스 본문 내용을 붙여넣으세요"></textarea>
-                <input id="manual-url" type="text" style="width:50%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;margin-top:8px;" placeholder="원문 URL (선택사항)">
+                <input id="manual-url" type="text" style="width:50%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;margin-top:8px;" placeholder="원문 URL">
                 <div style="margin-top:12px;">
-                    <button class="summarize-btn" onclick="updateManualPreview()" style="padding:12px 24px;font-size:15px;">기사 가져오기</button>
+                    <button class="summarize-btn" onclick="saveManualArticle()" id="manual-fetch-btn" style="padding:12px 24px;font-size:15px;">기사 가져오기</button>
                 </div>
             </div>
-            <div id="manual-article-view" style="display:none;">
-                <div class="result-item">
-                    <h2 id="manual-article-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px;"></h2>
-                    <div class="article-layout">
-                        <div class="article-body" id="manual-article-body"></div>
-                        <div class="summary-wrapper">
-                            <div class="summary-section" id="manual-summary-section">
-                                <div class="summary-title" id="manual-summary-title"></div>
-                                <div class="summary-content" id="manual-summary-content"></div>
-                            </div>
-                            <div class="summary-eng-section hidden" id="manual-eng-section">
-                                <div class="summary-title" id="manual-eng-title"></div>
-                                <div class="summary-content" id="manual-eng-content"></div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="btn-row">
-                        <a id="manual-original-btn" href="#" target="_blank" class="original-btn" style="display:none;">원문 보기</a>
-                        <button class="summarize-btn" onclick="summarizeManualArticle()" id="manual-summarize-btn">요약하기</button>
-                    </div>
-                </div>
-            </div>
+            <div id="manual-articles"></div>
         </div>
 
         <!-- Home / Daily News -->
@@ -1114,79 +1093,66 @@ HTML_TEMPLATE = """
     }
 
     // 직접 입력-URL 탭 클릭
-    function showCustomInput() {
+    async function showCustomInput() {
         setActiveTab('custom');
-        currentFeedName = '직접 입력';
+        currentFeedName = '직접 입력-URL';
         showSection('custom');
+        await loadCustomArticlesFromDB('직접 입력-URL', 'custom-articles');
     }
 
     // 직접 입력-본문 탭 클릭
-    function showCustomManual() {
+    async function showCustomManual() {
         setActiveTab('custom-manual');
-        currentFeedName = '직접 입력';
+        currentFeedName = '직접 입력-본문';
         showSection('custom-manual');
+        await loadCustomArticlesFromDB('직접 입력-본문', 'manual-articles');
     }
 
-    // 직접 입력-본문: 미리보기 갱신
-    function updateManualPreview() {
-        var title = document.getElementById('manual-title').value.trim();
-        var body = document.getElementById('manual-body').value.trim();
-        var url = document.getElementById('manual-url').value.trim();
-        var view = document.getElementById('manual-article-view');
-        if (!title && !body) { view.style.display = 'none'; return; }
-        view.style.display = '';
-        document.getElementById('manual-article-title').textContent = title || '(제목 없음)';
-        document.getElementById('manual-article-body').textContent = body || '';
-        var origBtn = document.getElementById('manual-original-btn');
-        if (url) { origBtn.href = url; origBtn.style.display = ''; }
-        else { origBtn.style.display = 'none'; }
+    // DB에서 직접 입력 기사 로드
+    async function loadCustomArticlesFromDB(publisher, containerId) {
+        var container = document.getElementById(containerId);
+        container.innerHTML = '<div class="loading-overlay" style="display:block;">기사를 불러오는 중...</div>';
+        try {
+            var res = await fetch('/api/articles?publisher=' + encodeURIComponent(publisher) + '&order_by=created_at');
+            var data = await res.json();
+            articles = data.articles || [];
+            renderArticleList(containerId);
+        } catch (e) {
+            container.innerHTML = '<div class="error-msg">기사를 불러오는 중 오류가 발생했습니다.</div>';
+        }
     }
 
-    // 직접 입력-본문: 요약하기
-    async function summarizeManualArticle() {
+    // 직접 입력-본문: 기사 저장
+    async function saveManualArticle() {
         var title = document.getElementById('manual-title').value.trim();
         var body = document.getElementById('manual-body').value.trim();
         var url = document.getElementById('manual-url').value.trim();
         if (!title) { alert('제목을 입력해주세요.'); return; }
         if (!body) { alert('본문을 입력해주세요.'); return; }
-        updateManualPreview();
-        var btn = document.getElementById('manual-summarize-btn');
-        var summarySection = document.getElementById('manual-summary-section');
-        var summaryContent = document.getElementById('manual-summary-content');
-        var summaryTitle = document.getElementById('manual-summary-title');
-        var engSection = document.getElementById('manual-eng-section');
-        var engTitle = document.getElementById('manual-eng-title');
-        var engContent = document.getElementById('manual-eng-content');
+        if (!url) { alert('URL을 입력해주세요.'); return; }
+        var btn = document.getElementById('manual-fetch-btn');
         btn.disabled = true;
-        btn.textContent = '요약 중...';
-        summarySection.classList.add('visible');
-        summaryContent.textContent = 'AI가 요약하는 중입니다...';
+        btn.textContent = '저장 중...';
         try {
-            var res = await fetch('/api/summarize', {
+            await fetch('/api/save-custom-articles', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: title, body: body, link: url, publisher: '직접 입력' })
+                body: JSON.stringify({ articles: [{ title: title, body: body, link: url }], publisher: '직접 입력-본문' })
             });
-            var data = await res.json();
-            summaryContent.textContent = data.summary || '';
-            summaryTitle.textContent = data.title_ko || title;
-            if (data.title_ko) {
-                document.getElementById('manual-article-title').textContent = data.title_ko;
-            }
-            if (data.summary_eng || data.title_eng) {
-                engSection.classList.remove('hidden');
-                engTitle.textContent = data.title_eng || '';
-                engContent.textContent = data.summary_eng || '';
-            }
-            btn.textContent = '요약 완료';
+            // 입력 필드 초기화
+            document.getElementById('manual-title').value = '';
+            document.getElementById('manual-body').value = '';
+            document.getElementById('manual-url').value = '';
+            // DB에서 다시 로드
+            await loadCustomArticlesFromDB('직접 입력-본문', 'manual-articles');
         } catch (e) {
-            summaryContent.textContent = '요약 중 오류가 발생했습니다.';
-            btn.textContent = '요약하기';
-            btn.disabled = false;
+            alert('저장 중 오류가 발생했습니다.');
         }
+        btn.disabled = false;
+        btn.textContent = '기사 가져오기';
     }
 
-    // 직접 입력: URL에서 기사 가져오기
+    // 직접 입력-URL: URL에서 기사 가져오기
     async function fetchCustomUrls() {
         const textarea = document.getElementById('custom-urls');
         const btn = document.getElementById('custom-fetch-btn');
@@ -1208,28 +1174,27 @@ HTML_TEMPLATE = """
                 body: JSON.stringify({ urls: urls })
             });
             const data = await res.json();
-            articles = (data.articles || []).map(a => ({
+            var fetched = (data.articles || []).map(a => ({
                 title: a.title,
                 body: a.body,
                 link: a.link,
                 summary: '',
                 pub_date: a.pub_date || '',
-                publisher: '직접 입력',
+                publisher: '직접 입력-URL',
                 error: a.error,
                 paywall: a.paywall
             }));
             // DB에 저장
-            if (articles.length > 0) {
-                const validArticles = articles.filter(a => !a.error);
-                if (validArticles.length > 0) {
-                    await fetch('/api/save-custom-articles', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ articles: validArticles, publisher: '직접 입력' })
-                    });
-                }
+            var validArticles = fetched.filter(a => !a.error);
+            if (validArticles.length > 0) {
+                await fetch('/api/save-custom-articles', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ articles: validArticles, publisher: '직접 입력-URL' })
+                });
             }
-            renderCustomArticles();
+            // DB에서 다시 로드 (created_at 순서로)
+            await loadCustomArticlesFromDB('직접 입력-URL', 'custom-articles');
         } catch (e) {
             document.getElementById('custom-articles').innerHTML = '<div class="error-msg">기사를 가져오는 중 오류가 발생했습니다.</div>';
         }
@@ -1237,11 +1202,11 @@ HTML_TEMPLATE = """
         btn.textContent = '기사 가져오기';
     }
 
-    // 직접 입력 기사 렌더링 (피드 기사와 동일한 형태)
-    function renderCustomArticles() {
-        const container = document.getElementById('custom-articles');
+    // 기사 목록 렌더링 (직접 입력-URL, 직접 입력-본문 공용)
+    function renderArticleList(containerId) {
+        const container = document.getElementById(containerId);
         if (articles.length === 0) {
-            container.innerHTML = '<div class="empty-state">가져온 기사가 없습니다.</div>';
+            container.innerHTML = '<div class="empty-state">저장된 기사가 없습니다.</div>';
             return;
         }
 
@@ -1802,11 +1767,6 @@ HTML_TEMPLATE = """
         renderDailyList();
     });
 
-    // 직접 입력-본문: 기본값 설정
-    document.getElementById('manual-title').value = {{ default_manual_title|tojson }};
-    document.getElementById('manual-body').value = {{ default_manual_body|tojson }};
-    document.getElementById('manual-url').value = {{ default_manual_url|tojson }};
-
     // 초기화: 홈 화면 표시
     showSection('home');
     loadDailyNewsFromDB().then(function() { renderDailyList(); });
@@ -2069,11 +2029,11 @@ async def api_collect_news_stream():
 
 
 @app.get("/api/articles")
-async def api_articles(publisher: str = ""):
+async def api_articles(publisher: str = "", order_by: str = "published_at"):
     """DB에서 특정 제공자의 기사 목록 조회"""
     if not publisher:
         return JSONResponse({"articles": []})
-    articles = load_articles_by_publisher(publisher)
+    articles = load_articles_by_publisher(publisher, order_by=order_by)
     return JSONResponse({"articles": articles})
 
 
