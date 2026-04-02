@@ -938,7 +938,7 @@ HTML_TEMPLATE = """
             </div>
             <div style="padding:20px 0;">
                 <p style="color:#888;font-size:14px;margin-bottom:12px;">뉴스 URL을 한 줄에 하나씩 입력하세요 (최대 20개)</p>
-                <textarea id="custom-urls" rows="6" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box;" placeholder="https://example.com/news/article1&#10;https://example.com/news/article2">https://themiilk.com/articles/aeaf8dcc6?u=12eaa86b&amp;t=ab2139228&amp;from=</textarea>
+                <textarea id="custom-urls" rows="6" style="width:50%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box;" placeholder="https://example.com/news/article1&#10;https://example.com/news/article2">https://themiilk.com/articles/aeaf8dcc6?u=12eaa86b&amp;t=ab2139228&amp;from=</textarea>
                 <div style="margin-top:12px;display:flex;gap:10px;">
                     <button class="summarize-btn" onclick="fetchCustomUrls()" id="custom-fetch-btn" style="padding:12px 24px;font-size:15px;">기사 가져오기</button>
                 </div>
@@ -953,9 +953,9 @@ HTML_TEMPLATE = """
             </div>
             <div style="padding:20px 0;">
                 <p style="color:#888;font-size:14px;margin-bottom:12px;">뉴스 제목과 본문을 직접 입력하세요</p>
-                <input id="manual-title" type="text" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;" placeholder="뉴스 제목">
-                <textarea id="manual-body" rows="10" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box;" placeholder="뉴스 본문 내용을 붙여넣으세요"></textarea>
-                <input id="manual-url" type="text" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;margin-top:8px;" placeholder="원문 URL (선택사항)">
+                <input id="manual-title" type="text" style="width:50%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;" placeholder="뉴스 제목">
+                <textarea id="manual-body" rows="10" style="width:50%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box;" placeholder="뉴스 본문 내용을 붙여넣으세요"></textarea>
+                <input id="manual-url" type="text" style="width:50%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;margin-top:8px;" placeholder="원문 URL (선택사항)">
             </div>
             <div id="manual-article-view" style="display:none;">
                 <div class="result-item">
@@ -1247,7 +1247,7 @@ HTML_TEMPLATE = """
             const dateFormatted = formatPubDate(a.pub_date);
             return '<div class="result-item" id="article-' + i + '">' +
                 '<h2 style="display:flex;align-items:center;justify-content:space-between;gap:12px;">' +
-                    '<a href="' + escapeHtml(a.link) + '" target="_blank" style="flex:1;">' + escapeHtml(a.title) + '</a>' +
+                    '<span style="flex:1;">' + escapeHtml(a.title) + '</span>' +
                     (dateFormatted ? '<span class="article-date">' + dateFormatted + '</span>' : '') +
                     '<button class="daily-btn' + (isSelected ? ' selected' : '') + '" onclick="selectForDaily(' + i + ')" id="daily-btn-' + i + '">' + (isSelected ? '선택됨' : 'Daily News 로 선택') + '</button>' +
                 '</h2>' +
@@ -1305,7 +1305,7 @@ HTML_TEMPLATE = """
             const dateFormatted = formatPubDate(a.pub_date);
             return '<div class="result-item" id="article-' + i + '">' +
                 '<h2 style="display:flex;align-items:center;justify-content:space-between;gap:12px;">' +
-                    '<a href="' + escapeHtml(a.link) + '" target="_blank" style="flex:1;">' + escapeHtml(a.title) + '</a>' +
+                    '<span style="flex:1;">' + escapeHtml(a.title) + '</span>' +
                     (dateFormatted ? '<span class="article-date">' + dateFormatted + '</span>' : '') +
                     '<button class="daily-btn' + (isSelected ? ' selected' : '') + '" onclick="selectForDaily(' + i + ')" id="daily-btn-' + i + '">' + (isSelected ? '선택됨' : 'Daily News 로 선택') + '</button>' +
                 '</h2>' +
@@ -1791,6 +1791,11 @@ HTML_TEMPLATE = """
         await loadDailyNewsFromDB();
         renderDailyList();
     });
+
+    // 직접 입력-본문: 기본값 설정
+    document.getElementById('manual-title').value = "Anthropic's Claude Code Leak Revealed Unreleased Features";
+    document.getElementById('manual-body').value = "Anthropic PBC's accidental release of source code for its popular AI coding agent was the result of \"process errors\" related to the startup's fast product release cycle, according to a senior executive at the company.\n\nPaul Smith, Anthropic's chief commercial officer, said the leak was \"absolutely not breaches or hacks,\" and the mistakes have been addressed. \"They're part of the incredibly rapid release cycle that we've had around Claude Code,\" Smith said in an interview Wednesday.\n\nAnthropic takes the issue \"incredibly seriously,\" he added, noting that the firm has \"all the right people focused on addressing it.\"\nThe unintended release marked Anthropic's second security slip-up in a matter of days, compromising approximately 1,900 files and 512,000 lines of code related to Claude Code. Last week, Fortune separately reported that Anthropic had been storing thousands of internal files on a publicly accessible system, including a draft blog post that detailed an upcoming model known internally as both \"Mythos\" and \"Capybara.\"\nIn a series of posts overnight on X, Claude Code creator Boris Cherny said Anthropic's \"deploy process has a few manual steps, and we didn't do one of the steps correctly.\" He said the company has already \"made a few improvements to the automation for next time,\" with plans for \"a couple more on the way.\"\n\nThe code included at least eight unreleased features, according to Abhishek Tiwari, an entrepreneur who quickly coded a website to track the leak using AI. Among them, he listed:\n\nKairos, a setting that allows Claude to run in the background.\nCoordinator Mode, which allows AI to break a task into pieces and delegate them to individual workers.\nAuto-Dream, in which Claude reviews what it learns and organizes notes into clean, structured memory files.\nUltraplan, which allows the creation of a separate cloud instance that explores and plans up to 30 minutes at a time.\nAnthropic did not comment on the features or its plans. \"We're always experimenting with new ideas. 90% don't ship because we don't think they're good enough experiences,\" Cherny said in a response to a post on X.";
+    document.getElementById('manual-url').value = "https://www.bloomberg.com/news/articles/2026-04-01/anthropic-executive-blames-claude-code-leak-on-process-errors?srnd=phx-technology";
 
     // 직접 입력-본문: 입력 시 미리보기 갱신
     document.getElementById('manual-title').addEventListener('input', updateManualPreview);
