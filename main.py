@@ -1798,9 +1798,9 @@ HTML_TEMPLATE = """
     document.getElementById('manual-url').addEventListener('input', updateManualPreview);
 
     // 직접 입력-본문: 기본값 설정
-    document.getElementById('manual-title').value = "Anthropic's Claude Code Leak Revealed Unreleased Features";
-    document.getElementById('manual-body').value = "Anthropic PBC's accidental release of source code for its popular AI coding agent was the result of \"process errors\" related to the startup's fast product release cycle, according to a senior executive at the company.\n\nPaul Smith, Anthropic's chief commercial officer, said the leak was \"absolutely not breaches or hacks,\" and the mistakes have been addressed. \"They're part of the incredibly rapid release cycle that we've had around Claude Code,\" Smith said in an interview Wednesday.\n\nAnthropic takes the issue \"incredibly seriously,\" he added, noting that the firm has \"all the right people focused on addressing it.\"\nThe unintended release marked Anthropic's second security slip-up in a matter of days, compromising approximately 1,900 files and 512,000 lines of code related to Claude Code. Last week, Fortune separately reported that Anthropic had been storing thousands of internal files on a publicly accessible system, including a draft blog post that detailed an upcoming model known internally as both \"Mythos\" and \"Capybara.\"\nIn a series of posts overnight on X, Claude Code creator Boris Cherny said Anthropic's \"deploy process has a few manual steps, and we didn't do one of the steps correctly.\" He said the company has already \"made a few improvements to the automation for next time,\" with plans for \"a couple more on the way.\"\n\nThe code included at least eight unreleased features, according to Abhishek Tiwari, an entrepreneur who quickly coded a website to track the leak using AI. Among them, he listed:\n\nKairos, a setting that allows Claude to run in the background.\nCoordinator Mode, which allows AI to break a task into pieces and delegate them to individual workers.\nAuto-Dream, in which Claude reviews what it learns and organizes notes into clean, structured memory files.\nUltraplan, which allows the creation of a separate cloud instance that explores and plans up to 30 minutes at a time.\nAnthropic did not comment on the features or its plans. \"We're always experimenting with new ideas. 90% don't ship because we don't think they're good enough experiences,\" Cherny said in a response to a post on X.";
-    document.getElementById('manual-url').value = "https://www.bloomberg.com/news/articles/2026-04-01/anthropic-scrambles-to-address-leak-of-claude-code-source-code?srnd=phx-technology";
+    document.getElementById('manual-title').value = {{ default_manual_title|tojson }};
+    document.getElementById('manual-body').value = {{ default_manual_body|tojson }};
+    document.getElementById('manual-url').value = {{ default_manual_url|tojson }};
 
     // 초기화: 홈 화면 표시
     showSection('home');
@@ -2247,6 +2247,24 @@ async def get_index(feed: str = None):
         except ValueError:
             pass
 
+    default_manual_title = "Anthropic's Claude Code Leak Revealed Unreleased Features"
+    default_manual_body = """Anthropic PBC's accidental release of source code for its popular AI coding agent was the result of "process errors" related to the startup's fast product release cycle, according to a senior executive at the company.
+
+Paul Smith, Anthropic's chief commercial officer, said the leak was "absolutely not breaches or hacks," and the mistakes have been addressed. "They're part of the incredibly rapid release cycle that we've had around Claude Code," Smith said in an interview Wednesday.
+
+Anthropic takes the issue "incredibly seriously," he added, noting that the firm has "all the right people focused on addressing it."
+The unintended release marked Anthropic's second security slip-up in a matter of days, compromising approximately 1,900 files and 512,000 lines of code related to Claude Code. Last week, Fortune separately reported that Anthropic had been storing thousands of internal files on a publicly accessible system, including a draft blog post that detailed an upcoming model known internally as both "Mythos" and "Capybara."
+In a series of posts overnight on X, Claude Code creator Boris Cherny said Anthropic's "deploy process has a few manual steps, and we didn't do one of the steps correctly." He said the company has already "made a few improvements to the automation for next time," with plans for "a couple more on the way."
+
+The code included at least eight unreleased features, according to Abhishek Tiwari, an entrepreneur who quickly coded a website to track the leak using AI. Among them, he listed:
+
+Kairos, a setting that allows Claude to run in the background.
+Coordinator Mode, which allows AI to break a task into pieces and delegate them to individual workers.
+Auto-Dream, in which Claude reviews what it learns and organizes notes into clean, structured memory files.
+Ultraplan, which allows the creation of a separate cloud instance that explores and plans up to 30 minutes at a time.
+Anthropic did not comment on the features or its plans. "We're always experimenting with new ideas. 90% don't ship because we don't think they're good enough experiences," Cherny said in a response to a post on X."""
+    default_manual_url = "https://www.bloomberg.com/news/articles/2026-04-01/anthropic-scrambles-to-address-leak-of-claude-code-source-code?srnd=phx-technology"
+
     return HTMLResponse(content=template.render(
         feeds=RSS_FEEDS,
         active_feed=active_feed,
@@ -2254,6 +2272,9 @@ async def get_index(feed: str = None):
         articles=[],
         error=None,
         db_error=supabase_error,
+        default_manual_title=default_manual_title,
+        default_manual_body=default_manual_body,
+        default_manual_url=default_manual_url,
     ))
 
 if __name__ == "__main__":
