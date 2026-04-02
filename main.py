@@ -1796,6 +1796,11 @@ HTML_TEMPLATE = """
         renderDailyList();
     });
 
+    // 직접 입력-본문: 기본값 설정
+    document.getElementById('manual-title').value = {{ default_manual_title|tojson }};
+    document.getElementById('manual-body').value = {{ default_manual_body|tojson }};
+    document.getElementById('manual-url').value = {{ default_manual_url|tojson }};
+
     // 초기화: 홈 화면 표시
     showSection('home');
     loadDailyNewsFromDB().then(function() { renderDailyList(); });
