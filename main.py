@@ -905,7 +905,13 @@ HTML_TEMPLATE = """
            class="feed-tab"
            onclick="showCustomInput()"
            data-feed-idx="custom">
-            직접 입력
+            직접 입력-URL
+        </a>
+        <a href="javascript:void(0)"
+           class="feed-tab"
+           onclick="showCustomManual()"
+           data-feed-idx="custom-manual">
+            직접 입력-본문
         </a>
     </nav>
 
@@ -938,6 +944,41 @@ HTML_TEMPLATE = """
                 </div>
             </div>
             <div id="custom-articles"></div>
+        </div>
+
+        <!-- 직접 입력-본문 섹션 -->
+        <div id="custom-manual-section" style="display:none;">
+            <div class="content-header">
+                <h1>직접 입력-본문</h1>
+            </div>
+            <div style="padding:20px 0;">
+                <p style="color:#888;font-size:14px;margin-bottom:12px;">뉴스 제목과 본문을 직접 입력하세요</p>
+                <input id="manual-title" type="text" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;" placeholder="뉴스 제목">
+                <textarea id="manual-body" rows="10" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box;" placeholder="뉴스 본문 내용을 붙여넣으세요"></textarea>
+                <input id="manual-url" type="text" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;margin-top:8px;" placeholder="원문 URL (선택사항)">
+            </div>
+            <div id="manual-article-view" style="display:none;">
+                <div class="result-item">
+                    <h2 id="manual-article-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px;"></h2>
+                    <div class="article-layout">
+                        <div class="article-body" id="manual-article-body"></div>
+                        <div class="summary-wrapper">
+                            <div class="summary-section" id="manual-summary-section">
+                                <div class="summary-title" id="manual-summary-title"></div>
+                                <div class="summary-content" id="manual-summary-content"></div>
+                            </div>
+                            <div class="summary-eng-section hidden" id="manual-eng-section">
+                                <div class="summary-title" id="manual-eng-title"></div>
+                                <div class="summary-content" id="manual-eng-content"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="btn-row">
+                        <a id="manual-original-btn" href="#" target="_blank" class="original-btn" style="display:none;">원문 보기</a>
+                        <button class="summarize-btn" onclick="summarizeManualArticle()" id="manual-summarize-btn">요약하기</button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Home / Daily News -->
@@ -1032,6 +1073,7 @@ HTML_TEMPLATE = """
         document.getElementById('feed-articles').innerHTML = '';
         document.getElementById('home-section').style.display = 'none';
         document.getElementById('custom-section').style.display = 'none';
+        document.getElementById('custom-manual-section').style.display = 'none';
         document.getElementById('loading').style.display = 'none';
 
         if (section === 'home' || section === 'collect') {
@@ -1040,6 +1082,8 @@ HTML_TEMPLATE = """
             document.getElementById('feed-header').style.display = '';
         } else if (section === 'custom') {
             document.getElementById('custom-section').style.display = '';
+        } else if (section === 'custom-manual') {
+            document.getElementById('custom-manual-section').style.display = '';
         }
 
         // collect-status는 isCollecting 상태에 따라 표시
@@ -1057,11 +1101,79 @@ HTML_TEMPLATE = """
         }
     }
 
-    // 직접 입력 탭 클릭
+    // 직접 입력-URL 탭 클릭
     function showCustomInput() {
         setActiveTab('custom');
         currentFeedName = '직접 입력';
         showSection('custom');
+    }
+
+    // 직접 입력-본문 탭 클릭
+    function showCustomManual() {
+        setActiveTab('custom-manual');
+        currentFeedName = '직접 입력';
+        showSection('custom-manual');
+        // 입력값이 있으면 미리보기 갱신
+        updateManualPreview();
+    }
+
+    // 직접 입력-본문: 미리보기 갱신
+    function updateManualPreview() {
+        var title = document.getElementById('manual-title').value.trim();
+        var body = document.getElementById('manual-body').value.trim();
+        var url = document.getElementById('manual-url').value.trim();
+        var view = document.getElementById('manual-article-view');
+        if (!title && !body) { view.style.display = 'none'; return; }
+        view.style.display = '';
+        document.getElementById('manual-article-title').textContent = title || '(제목 없음)';
+        document.getElementById('manual-article-body').textContent = body || '';
+        var origBtn = document.getElementById('manual-original-btn');
+        if (url) { origBtn.href = url; origBtn.style.display = ''; }
+        else { origBtn.style.display = 'none'; }
+    }
+
+    // 직접 입력-본문: 요약하기
+    async function summarizeManualArticle() {
+        var title = document.getElementById('manual-title').value.trim();
+        var body = document.getElementById('manual-body').value.trim();
+        var url = document.getElementById('manual-url').value.trim();
+        if (!title) { alert('제목을 입력해주세요.'); return; }
+        if (!body) { alert('본문을 입력해주세요.'); return; }
+        updateManualPreview();
+        var btn = document.getElementById('manual-summarize-btn');
+        var summarySection = document.getElementById('manual-summary-section');
+        var summaryContent = document.getElementById('manual-summary-content');
+        var summaryTitle = document.getElementById('manual-summary-title');
+        var engSection = document.getElementById('manual-eng-section');
+        var engTitle = document.getElementById('manual-eng-title');
+        var engContent = document.getElementById('manual-eng-content');
+        btn.disabled = true;
+        btn.textContent = '요약 중...';
+        summarySection.classList.add('visible');
+        summaryContent.textContent = 'AI가 요약하는 중입니다...';
+        try {
+            var res = await fetch('/api/summarize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: title, body: body, link: url, publisher: '직접 입력' })
+            });
+            var data = await res.json();
+            summaryContent.textContent = data.summary || '';
+            summaryTitle.textContent = data.title_ko || title;
+            if (data.title_ko) {
+                document.getElementById('manual-article-title').textContent = data.title_ko;
+            }
+            if (data.summary_eng || data.title_eng) {
+                engSection.classList.remove('hidden');
+                engTitle.textContent = data.title_eng || '';
+                engContent.textContent = data.summary_eng || '';
+            }
+            btn.textContent = '요약 완료';
+        } catch (e) {
+            summaryContent.textContent = '요약 중 오류가 발생했습니다.';
+            btn.textContent = '요약하기';
+            btn.disabled = false;
+        }
     }
 
     // 직접 입력: URL에서 기사 가져오기
@@ -1582,10 +1694,20 @@ HTML_TEMPLATE = """
         }
     }
 
+    // 직접 입력 탭 비활성화/활성화
+    function setCustomTabsDisabled(disabled) {
+        var tabs = document.querySelectorAll('.feed-tab[data-feed-idx="custom"], .feed-tab[data-feed-idx="custom-manual"]');
+        for (var i = 0; i < tabs.length; i++) {
+            tabs[i].style.pointerEvents = disabled ? 'none' : '';
+            tabs[i].style.opacity = disabled ? '0.4' : '';
+        }
+    }
+
     // 뉴스 업데이트 버튼 클릭
     async function collectNews() {
         const btn = document.getElementById('collect-btn');
         btn.disabled = true;
+        setCustomTabsDisabled(true);
         btn.innerHTML = '<span class="btn-spinner"></span>수집 중...';
         isCollecting = true;
 
@@ -1644,13 +1766,15 @@ HTML_TEMPLATE = """
                 }
             }
             var delay = (finalData && finalData.errors && finalData.errors.length > 0) ? 6000 : 3000;
-            setTimeout(() => {
+            setTimeout(function() {
                 isCollecting = false;
+                setCustomTabsDisabled(false);
                 document.getElementById('collect-status').style.display = 'none';
                 renderDailyList();
             }, delay);
         } catch (e) {
             isCollecting = false;
+            setCustomTabsDisabled(false);
             spinner.className = 'collect-spinner done';
             statusText.textContent = '뉴스 수집 중 오류가 발생했습니다';
             statusSub.textContent = e.message || '알 수 없는 오류';
@@ -1667,6 +1791,11 @@ HTML_TEMPLATE = """
         await loadDailyNewsFromDB();
         renderDailyList();
     });
+
+    // 직접 입력-본문: 입력 시 미리보기 갱신
+    document.getElementById('manual-title').addEventListener('input', updateManualPreview);
+    document.getElementById('manual-body').addEventListener('input', updateManualPreview);
+    document.getElementById('manual-url').addEventListener('input', updateManualPreview);
 
     // 초기화: 홈 화면 표시
     showSection('home');
