@@ -180,6 +180,7 @@ def save_custom_articles_to_db(articles, publisher=""):
     supabase_error = None
     if not supabase:
         return 0
+    from datetime import datetime, timezone
     saved = 0
     for article in articles:
         try:
@@ -189,28 +190,16 @@ def save_custom_articles_to_db(articles, publisher=""):
                 "summary": article.get("summary", ""),
                 "url": article.get("link", ""),
                 "publisher": publisher,
+                "published_at": datetime.now(timezone.utc).isoformat(),
             }
-            # pub_date가 있으면 published_at에 저장, 실패해도 무시
-            pub_date = article.get("pub_date", "")
-            if pub_date:
-                row["published_at"] = pub_date
             supabase.table("news-understanding").upsert(
                 row,
                 on_conflict="url",
             ).execute()
             saved += 1
         except Exception as e:
-            # pub_date 형식 문제일 수 있으므로 published_at 없이 재시도
-            try:
-                row.pop("published_at", None)
-                supabase.table("news-understanding").upsert(
-                    row,
-                    on_conflict="url",
-                ).execute()
-                saved += 1
-            except Exception as e2:
-                supabase_error = f"DB 저장 오류: {e2}"
-                print(supabase_error)
+            supabase_error = f"DB 저장 오류: {e}"
+            print(supabase_error)
     return saved
 
 
