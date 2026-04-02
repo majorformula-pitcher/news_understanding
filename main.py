@@ -1038,7 +1038,7 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
             const h = String(kst.getUTCHours()).padStart(2, '0');
             const min = String(kst.getUTCMinutes()).padStart(2, '0');
             return y + '.' + m + '.' + day + ' ' + h + ':' + min;
-        } catch { return raw; }
+        } catch (e) { return raw; }
     }
 
     // 현재 로드된 기사 배열 (피드별로 갱신됨)
