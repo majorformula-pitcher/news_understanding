@@ -1044,7 +1044,7 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
     // 현재 로드된 기사 배열 (피드별로 갱신됨)
     let articles = [];
     let manualArticles = [];
-    let currentArticles = articles;
+    let customUrlArticles = [];
     let currentFeedName = '';
     let newsCollected = true;
 
@@ -1121,7 +1121,6 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
     function showCustomUrl() {
         setActiveTab('custom-url');
         currentFeedName = '직접 입력';
-        currentArticles = articles;
         showSection('custom-url');
     }
 
@@ -1129,7 +1128,6 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
     function showCustomManual() {
         setActiveTab('custom-manual');
         currentFeedName = '직접 입력';
-        currentArticles = manualArticles;
         showSection('custom-manual');
     }
 
@@ -1155,7 +1153,7 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
                 body: JSON.stringify({ urls: urls })
             });
             const data = await res.json();
-            articles = (data.articles || []).map(a => ({
+            customUrlArticles = (data.articles || []).map(a => ({
                 title: a.title,
                 body: a.body,
                 link: a.link,
@@ -1165,7 +1163,7 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
                 error: a.error,
                 paywall: a.paywall
             }));
-            renderCustomArticles('custom-url-articles');
+            renderCustomArticles('custom-url-articles', customUrlArticles, 'url');
         } catch (e) {
             document.getElementById('custom-url-articles').innerHTML = '<div class="error-msg">기사를 가져오는 중 오류가 발생했습니다.</div>';
         }
@@ -1196,17 +1194,18 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
             paywall: false
         };
         manualArticles.push(newArticle);
-        renderCustomArticles('custom-manual-articles', manualArticles);
+        renderCustomArticles('custom-manual-articles', manualArticles, 'manual');
         // 입력 필드 초기화
         titleInput.value = '';
         bodyInput.value = '';
         urlInput.value = '';
     }
 
-    // 직접 입력 기사 렌더링 (피드 기사와 동일한 형태)
-    function renderCustomArticles(containerId, articleList) {
-        const container = document.getElementById(containerId || 'custom-url-articles');
-        const list = articleList || articles;
+    // 직접 입력 기사 렌더링 (피드 기사와 별도 ID/함수 사용)
+    function renderCustomArticles(containerId, articleList, listType) {
+        const container = document.getElementById(containerId);
+        const list = articleList;
+        const prefix = listType === 'manual' ? 'manual-article' : 'custom-article';
         if (list.length === 0) {
             container.innerHTML = '<div class="empty-state">가져온 기사가 없습니다.</div>';
             return;
@@ -1225,20 +1224,20 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
             const isSelected = a.is_daily;
             const hasSummary = a.summary && a.summary.trim().length > 0;
             const dateFormatted = formatPubDate(a.pub_date);
-            return '<div class="result-item" id="article-' + i + '">' +
+            return '<div class="result-item" id="' + prefix + '-' + i + '">' +
                 '<h2 style="display:flex;align-items:center;justify-content:space-between;gap:12px;">' +
                     '<span style="flex:1;">' + escapeHtml(a.title) + '</span>' +
                     (dateFormatted ? '<span class="article-date">' + dateFormatted + '</span>' : '') +
-                    '<button class="daily-btn' + (isSelected ? ' selected' : '') + '" onclick="selectForDaily(' + i + ')" id="daily-btn-' + i + '">' + (isSelected ? '선택됨' : 'Daily News 로 선택') + '</button>' +
+                    '<button class="daily-btn' + (isSelected ? ' selected' : '') + '" onclick="selectCustomForDaily(' + i + ',\'' + listType + '\')" id="' + prefix + '-daily-btn-' + i + '">' + (isSelected ? '선택됨' : 'Daily News 로 선택') + '</button>' +
                 '</h2>' +
                 '<div class="article-layout">' +
                     '<div class="article-body">' + escapeHtml(a.body) + '</div>' +
                     '<div class="summary-wrapper">' +
-                        '<div class="summary-section' + (hasSummary ? ' visible' : '') + '" id="summary-' + i + '">' +
+                        '<div class="summary-section' + (hasSummary ? ' visible' : '') + '" id="' + prefix + '-summary-' + i + '">' +
                             '<div class="summary-title">' + escapeHtml(a.title) + '</div>' +
                             '<div class="summary-content">' + (hasSummary ? escapeHtml(a.summary) : '') + '</div>' +
                         '</div>' +
-                        '<div class="summary-eng-section' + ((a.summary_eng || a.title_eng) ? '' : ' hidden') + '" id="summary-eng-section-' + i + '">' +
+                        '<div class="summary-eng-section' + ((a.summary_eng || a.title_eng) ? '' : ' hidden') + '" id="' + prefix + '-eng-section-' + i + '">' +
                             '<div class="summary-title">' + escapeHtml(a.title_eng || '') + '</div>' +
                             '<div class="summary-content">' + escapeHtml(a.summary_eng || '') + '</div>' +
                         '</div>' +
@@ -1246,7 +1245,7 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
                 '</div>' +
                 '<div class="btn-row">' +
                     (a.link && !a.link.startsWith('manual://') ? '<a href="' + escapeHtml(a.link) + '" target="_blank" class="original-btn">원문 보기</a>' : '') +
-                    '<button class="summarize-btn" onclick="summarizeArticle(' + i + ')"' + (hasSummary ? ' disabled' : '') + '>' + (hasSummary ? '요약 완료' : '요약하기') + '</button>' +
+                    '<button class="summarize-btn" onclick="summarizeCustomArticle(' + i + ',\'' + listType + '\')" id="' + prefix + '-summarize-btn-' + i + '"' + (hasSummary ? ' disabled' : '') + '>' + (hasSummary ? '요약 완료' : '요약하기') + '</button>' +
                 '</div>' +
             '</div>';
         }).join('');
@@ -1256,7 +1255,6 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
     async function loadFeedFromDB(feedIdx, feedName) {
         setActiveTab(feedIdx);
         currentFeedName = feedName;
-        currentArticles = articles;
         showSection('feed');
         document.getElementById('feed-header-title').textContent = feedName;
         document.getElementById('loading').style.display = 'block';
@@ -1311,10 +1309,10 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
         }).join('');
     }
 
-    // Daily News 로 선택 버튼 클릭 (토글)
+    // Daily News 로 선택 버튼 클릭 (토글) — 피드 기사용
     async function selectForDaily(idx) {
         const btn = document.getElementById('daily-btn-' + idx);
-        const article = currentArticles[idx];
+        const article = articles[idx];
         const summaryDiv = document.getElementById('summary-' + idx);
         const contentDiv = summaryDiv.querySelector('.summary-content');
 
@@ -1328,7 +1326,7 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ link: article.link, is_daily: false })
                 });
-                currentArticles[idx].is_daily = false;
+                articles[idx].is_daily = false;
                 btn.textContent = 'Daily News 로 선택';
                 btn.classList.remove('selected');
                 await loadDailyNewsFromDB();
@@ -1343,18 +1341,6 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
         // DB에서 로드된 요약 또는 화면에 표시된 요약 확인
         const existingSummary = (article.summary && article.summary.trim().length > 0) ? article.summary :
             (summaryDiv.classList.contains('visible') ? contentDiv.textContent : null);
-        const publisher = currentFeedName === '직접 입력' ? extractPublisher(article.link) : currentFeedName;
-
-        // 직접 입력 기사는 DB에 먼저 저장
-        if (currentFeedName === '직접 입력') {
-            try {
-                await fetch('/api/save-custom-articles', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ articles: [article], publisher: publisher })
-                });
-            } catch (e) {}
-        }
 
         if (existingSummary && existingSummary !== 'AI가 요약하는 중입니다...' && existingSummary !== '요약 중 오류가 발생했습니다.') {
             btn.disabled = true;
@@ -1365,13 +1351,13 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
                     const res = await fetch('/api/summarize', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ title: article.title, body: article.body, link: article.link, publisher: publisher })
+                        body: JSON.stringify({ title: article.title, body: article.body, link: article.link, publisher: currentFeedName })
                     });
                     const data = await res.json();
-                    if (data.summary) { currentArticles[idx].summary = data.summary; var cd = document.querySelector('#summary-' + idx + ' .summary-content'); if (cd) cd.textContent = data.summary; }
-                    if (data.summary_eng) currentArticles[idx].summary_eng = data.summary_eng;
-                    if (data.title_eng) currentArticles[idx].title_eng = data.title_eng;
-                    if (data.title_ko) { currentArticles[idx].title = data.title_ko; var a2 = document.querySelector('#article-' + idx + ' h2 a'); if (a2) a2.textContent = data.title_ko; var st2 = document.querySelector('#summary-' + idx + ' .summary-title'); if (st2) st2.textContent = data.title_ko; }
+                    if (data.summary) { articles[idx].summary = data.summary; var cd = document.querySelector('#summary-' + idx + ' .summary-content'); if (cd) cd.textContent = data.summary; }
+                    if (data.summary_eng) articles[idx].summary_eng = data.summary_eng;
+                    if (data.title_eng) articles[idx].title_eng = data.title_eng;
+                    if (data.title_ko) { articles[idx].title = data.title_ko; var a2 = document.querySelector('#article-' + idx + ' h2 a'); if (a2) a2.textContent = data.title_ko; var st2 = document.querySelector('#summary-' + idx + ' .summary-title'); if (st2) st2.textContent = data.title_ko; }
                     var engSec = document.getElementById('summary-eng-section-' + idx);
                     if (engSec && (data.summary_eng || data.title_eng)) {
                         engSec.classList.remove('hidden');
@@ -1387,7 +1373,7 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ link: article.link, is_daily: true })
                 });
-                currentArticles[idx].is_daily = true;
+                articles[idx].is_daily = true;
                 btn.textContent = '선택됨';
                 btn.classList.add('selected');
                 await loadDailyNewsFromDB();
@@ -1409,14 +1395,14 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
             const res = await fetch('/api/summarize', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: article.title, body: article.body, link: article.link, publisher: publisher })
+                body: JSON.stringify({ title: article.title, body: article.body, link: article.link, publisher: currentFeedName })
             });
             const data = await res.json();
             contentDiv.textContent = data.summary;
-            currentArticles[idx].summary = data.summary;
-            if (data.summary_eng) currentArticles[idx].summary_eng = data.summary_eng;
-            if (data.title_eng) currentArticles[idx].title_eng = data.title_eng;
-            if (data.title_ko) { currentArticles[idx].title = data.title_ko; var ab = document.querySelector('#article-' + idx + ' h2 a'); if (ab) ab.textContent = data.title_ko; var stb = document.querySelector('#summary-' + idx + ' .summary-title'); if (stb) stb.textContent = data.title_ko; }
+            articles[idx].summary = data.summary;
+            if (data.summary_eng) articles[idx].summary_eng = data.summary_eng;
+            if (data.title_eng) articles[idx].title_eng = data.title_eng;
+            if (data.title_ko) { articles[idx].title = data.title_ko; var ab = document.querySelector('#article-' + idx + ' h2 a'); if (ab) ab.textContent = data.title_ko; var stb = document.querySelector('#summary-' + idx + ' .summary-title'); if (stb) stb.textContent = data.title_ko; }
             // 영문 요약 영역 표시
             var engSec2 = document.getElementById('summary-eng-section-' + idx);
             if (engSec2 && (data.summary_eng || data.title_eng)) {
@@ -1431,7 +1417,7 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ link: article.link, is_daily: true })
             });
-            currentArticles[idx].is_daily = true;
+            articles[idx].is_daily = true;
 
             btn.textContent = '선택됨';
             btn.classList.add('selected');
@@ -1448,13 +1434,139 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
         }
     }
 
-    async function summarizeArticle(idx) {
-        const articleEl = document.getElementById('article-' + idx);
-        const btn = articleEl.querySelector('.summarize-btn');
-        const summaryDiv = document.getElementById('summary-' + idx);
+    // 직접 입력 기사 전용: Daily News 로 선택 (DB 저장 + 요약 + 토글)
+    async function selectCustomForDaily(idx, listType) {
+        const list = listType === 'manual' ? manualArticles : customUrlArticles;
+        const prefix = listType === 'manual' ? 'manual-article' : 'custom-article';
+        const btn = document.getElementById(prefix + '-daily-btn-' + idx);
+        const article = list[idx];
+        const summaryDiv = document.getElementById(prefix + '-summary-' + idx);
         const contentDiv = summaryDiv.querySelector('.summary-content');
-        const article = currentArticles[idx];
-        const publisher = currentFeedName === '직접 입력' ? extractPublisher(article.link) : currentFeedName;
+        const publisher = extractPublisher(article.link);
+
+        // 이미 선택된 경우 → 선택 해제
+        if (article.is_daily) {
+            btn.disabled = true;
+            btn.textContent = '해제 중...';
+            try {
+                await fetch('/api/toggle-daily', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ link: article.link, is_daily: false })
+                });
+                list[idx].is_daily = false;
+                btn.textContent = 'Daily News 로 선택';
+                btn.classList.remove('selected');
+                await loadDailyNewsFromDB();
+                renderDailyList();
+            } catch (e) {
+                btn.textContent = '선택됨';
+            }
+            btn.disabled = false;
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'DB 저장 중...';
+
+        // 1. DB에 기사 저장
+        try {
+            await fetch('/api/save-custom-articles', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ articles: [article], publisher: publisher })
+            });
+        } catch (e) {
+            btn.textContent = 'Daily News 로 선택';
+            btn.disabled = false;
+            alert('DB 저장에 실패했습니다.');
+            return;
+        }
+
+        // 2. 요약
+        const existingSummary = (article.summary && article.summary.trim().length > 0) ? article.summary :
+            (summaryDiv.classList.contains('visible') ? contentDiv.textContent : null);
+
+        if (existingSummary && existingSummary !== 'AI가 요약하는 중입니다...' && existingSummary !== '요약 중 오류가 발생했습니다.') {
+            if (!article.summary_eng) {
+                btn.textContent = '영문 요약 중...';
+                try {
+                    const res = await fetch('/api/summarize', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ title: article.title, body: article.body, link: article.link, publisher: publisher })
+                    });
+                    const data = await res.json();
+                    if (data.summary) { list[idx].summary = data.summary; var cd = summaryDiv.querySelector('.summary-content'); if (cd) cd.textContent = data.summary; }
+                    if (data.summary_eng) list[idx].summary_eng = data.summary_eng;
+                    if (data.title_eng) list[idx].title_eng = data.title_eng;
+                    if (data.title_ko) { list[idx].title = data.title_ko; }
+                    var engSec = document.getElementById(prefix + '-eng-section-' + idx);
+                    if (engSec && (data.summary_eng || data.title_eng)) {
+                        engSec.classList.remove('hidden');
+                        engSec.querySelector('.summary-title').textContent = data.title_eng || '';
+                        engSec.querySelector('.summary-content').textContent = data.summary_eng || '';
+                    }
+                } catch (e) {}
+            }
+        } else {
+            btn.textContent = '요약 중...';
+            summaryDiv.classList.add('visible');
+            contentDiv.textContent = 'AI가 요약하는 중입니다...';
+            try {
+                const res = await fetch('/api/summarize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: article.title, body: article.body, link: article.link, publisher: publisher })
+                });
+                const data = await res.json();
+                contentDiv.textContent = data.summary;
+                list[idx].summary = data.summary;
+                if (data.summary_eng) list[idx].summary_eng = data.summary_eng;
+                if (data.title_eng) list[idx].title_eng = data.title_eng;
+                if (data.title_ko) { list[idx].title = data.title_ko; }
+                var engSec2 = document.getElementById(prefix + '-eng-section-' + idx);
+                if (engSec2 && (data.summary_eng || data.title_eng)) {
+                    engSec2.classList.remove('hidden');
+                    engSec2.querySelector('.summary-title').textContent = data.title_eng || '';
+                    engSec2.querySelector('.summary-content').textContent = data.summary_eng || '';
+                }
+            } catch (e) {
+                contentDiv.textContent = '요약 중 오류가 발생했습니다.';
+                btn.textContent = 'Daily News 로 선택';
+                btn.disabled = false;
+                return;
+            }
+        }
+
+        // 3. is_daily 토글
+        btn.textContent = '선택 중...';
+        try {
+            await fetch('/api/toggle-daily', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ link: article.link, is_daily: true })
+            });
+            list[idx].is_daily = true;
+            btn.textContent = '선택됨';
+            btn.classList.add('selected');
+            await loadDailyNewsFromDB();
+            renderDailyList();
+        } catch (e) {
+            btn.textContent = 'Daily News 로 선택';
+        }
+        btn.disabled = false;
+    }
+
+    // 직접 입력 기사 전용: 요약하기
+    async function summarizeCustomArticle(idx, listType) {
+        const list = listType === 'manual' ? manualArticles : customUrlArticles;
+        const prefix = listType === 'manual' ? 'manual-article' : 'custom-article';
+        const article = list[idx];
+        const publisher = extractPublisher(article.link);
+        const summaryDiv = document.getElementById(prefix + '-summary-' + idx);
+        const contentDiv = summaryDiv.querySelector('.summary-content');
+        const btn = document.getElementById(prefix + '-summarize-btn-' + idx);
 
         btn.disabled = true;
         btn.textContent = '요약 중...';
@@ -1462,14 +1574,12 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
         contentDiv.textContent = 'AI가 요약하는 중입니다...';
 
         try {
-            // 직접 입력 기사는 DB에 먼저 저장
-            if (currentFeedName === '직접 입력') {
-                await fetch('/api/save-custom-articles', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ articles: [article], publisher: publisher })
-                });
-            }
+            // DB에 먼저 저장
+            await fetch('/api/save-custom-articles', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ articles: [article], publisher: publisher })
+            });
             const res = await fetch('/api/summarize', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1478,11 +1588,49 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
             const data = await res.json();
             contentDiv.textContent = data.summary;
             btn.textContent = '요약 완료';
+            list[idx].summary = data.summary;
+            if (data.summary_eng) list[idx].summary_eng = data.summary_eng;
+            if (data.title_eng) list[idx].title_eng = data.title_eng;
+            if (data.title_ko) { list[idx].title = data.title_ko; }
+            var engSection = document.getElementById(prefix + '-eng-section-' + idx);
+            if (engSection && (data.summary_eng || data.title_eng)) {
+                engSection.classList.remove('hidden');
+                engSection.querySelector('.summary-title').textContent = data.title_eng || '';
+                engSection.querySelector('.summary-content').textContent = data.summary_eng || '';
+            }
+        } catch (e) {
+            contentDiv.textContent = '요약 중 오류가 발생했습니다.';
+            btn.textContent = '요약하기';
+            btn.disabled = false;
+        }
+    }
+
+    async function summarizeArticle(idx) {
+        const articleEl = document.getElementById('article-' + idx);
+        const btn = articleEl.querySelector('.summarize-btn');
+        const summaryDiv = document.getElementById('summary-' + idx);
+        const contentDiv = summaryDiv.querySelector('.summary-content');
+        const article = articles[idx];
+
+        btn.disabled = true;
+        btn.textContent = '요약 중...';
+        summaryDiv.classList.add('visible');
+        contentDiv.textContent = 'AI가 요약하는 중입니다...';
+
+        try {
+            const res = await fetch('/api/summarize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: article.title, body: article.body, link: article.link, publisher: currentFeedName })
+            });
+            const data = await res.json();
+            contentDiv.textContent = data.summary;
+            btn.textContent = '요약 완료';
             // 로컬 articles 배열도 업데이트
-            currentArticles[idx].summary = data.summary;
-            if (data.summary_eng) currentArticles[idx].summary_eng = data.summary_eng;
-            if (data.title_eng) currentArticles[idx].title_eng = data.title_eng;
-            if (data.title_ko) { currentArticles[idx].title = data.title_ko; var ac = document.querySelector('#article-' + idx + ' h2 a'); if (ac) ac.textContent = data.title_ko; var stc = document.querySelector('#summary-' + idx + ' .summary-title'); if (stc) stc.textContent = data.title_ko; }
+            articles[idx].summary = data.summary;
+            if (data.summary_eng) articles[idx].summary_eng = data.summary_eng;
+            if (data.title_eng) articles[idx].title_eng = data.title_eng;
+            if (data.title_ko) { articles[idx].title = data.title_ko; var ac = document.querySelector('#article-' + idx + ' h2 a'); if (ac) ac.textContent = data.title_ko; var stc = document.querySelector('#summary-' + idx + ' .summary-title'); if (stc) stc.textContent = data.title_ko; }
             // 영문 요약 영역 표시
             var engSection = document.getElementById('summary-eng-section-' + idx);
             if (engSection && (data.summary_eng || data.title_eng)) {
