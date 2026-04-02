@@ -938,7 +938,7 @@ HTML_TEMPLATE = """
             </div>
             <div style="padding:20px 0;">
                 <p style="color:#888;font-size:14px;margin-bottom:12px;">뉴스 URL을 한 줄에 하나씩 입력하세요 (최대 20개)</p>
-                <textarea id="custom-urls" rows="6" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box;" placeholder="https://themiilk.com/articles/abd29aa0c?u=12eaa86b&t=a76a9d1d7&from="></textarea>
+                <textarea id="custom-urls" rows="6" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box;" placeholder="https://example.com/news/article1">https://themiilk.com/articles/abd29aa0c?u=12eaa86b&amp;t=a76a9d1d7&amp;from=</textarea>
                 <div style="margin-top:12px;display:flex;gap:10px;">
                     <button class="summarize-btn" onclick="fetchCustomUrls()" id="custom-fetch-btn" style="padding:12px 24px;font-size:15px;">URL에서 기사 가져오기</button>
                 </div>
