@@ -953,32 +953,9 @@ HTML_TEMPLATE = """
             </div>
             <div style="padding:20px 0;">
                 <p style="color:#888;font-size:14px;margin-bottom:12px;">뉴스 제목과 본문을 직접 입력하세요</p>
-                <input id="manual-title" type="text" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;" placeholder="뉴스 제목" value="Anthropic Predicts Demand for Cowork Agent to Dwarf Claude Code">
-                <textarea id="manual-body" rows="10" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box;" placeholder="뉴스 본문 내용을 붙여넣으세요">A top Anthropic PBC executive expects the company's general-purpose artificial intelligence agent, Cowork, to reach a wider market than Claude Code, the hit product that helped turn the startup into an AI juggernaut.
-
-Anthropic has seen stronger adoption for Cowork "in the first few weeks" than it did in a comparable period for Claude Code a year ago, Chief Commercial Officer Paul Smith said in an interview on Wednesday. Smith said the average large company has somewhere between 2% and 5% of its staff working in engineering. Cowork, he said, is more likely to appeal to "the rest of us."
-
-Cowork was released as a "research preview" product earlier this year and quickly made a splash online. Unlike with Claude Code, a similar AI agent for programming, Cowork does not require users to run a terminal and type in a command line. It's also meant to tackle a broader range of tasks, potentially appealing to a bigger audience.
-
-Anthropic has emerged as an AI leader and a fierce competitor of OpenAI in large part due to Claude Code, which the company recently said generates more than $2 billion in annualized revenue. With products like Cowork, Anthropic aims to help streamline a wider range of work tasks and replicate the success it's had with software developers.
-At the same time, Anthropic is competing with the likes of OpenAI and Alphabet Inc.'s Google to build more advanced AI systems to power agents and other software. In the wide-ranging interview, Smith said he expects the rate of releases to accelerate.
-
-"I think the pace of innovation is going to increase," he said. "It is a reasonably safe bet to assume that model releases will keep coming, and if anything, they will keep coming with more frequency."
-
-Moving faster comes with challenges, however. Smith said the recent accidental release of the source code behind Claude Code was the result of "process errors" related to the startup's fast product release cycle.
-
-The leak was "absolutely not breaches or hacks," he said, and the mistakes have been addressed. "They're part of the incredibly rapid release cycle that we've had around Claude Code," he added.
-
-The exposure hits at a delicate moment for the company. Anthropic is currently in a legal battle with the US government over the Pentagon's decision to declare it a supply-chain risk following a standoff over AI safety guardrails. The company has warned that the labeling could cost it billions in lost revenue.
-
-Still, Smith said some customers respect that Anthropic "demonstrates its principles" in its dealings with the US government.
-
-As Anthropic battles the Pentagon, it's also pushing ahead with plans to go public as soon as this year, Bloomberg News has reported. Smith declined to comment on the timeline for an initial public offering, but said Anthropic is "very comfortable that we're on the right path from gross margin targets and the previous profitability targets that we've stated."
-
-For now, the company has a sizable war chest after finalizing a $30 billion funding round in February that can be used to spend on the costly chips, data centers and talent needed to compete in the global AI race.
-
-"We're very comfortable with our funding situation after the recent round that we concluded," he said.</textarea>
-                <input id="manual-url" type="text" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;margin-top:8px;" placeholder="원문 URL (선택사항)" value="https://www.bloomberg.com/news/articles/2026-04-01/anthropic-executive-sees-cowork-agent-as-bigger-than-claude-code?srnd=phx-technology">
+                <input id="manual-title" type="text" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;" placeholder="뉴스 제목">
+                <textarea id="manual-body" rows="10" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box;" placeholder="뉴스 본문 내용을 붙여넣으세요"></textarea>
+                <input id="manual-url" type="text" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;margin-top:8px;" placeholder="원문 URL (선택사항)">
                 <div style="margin-top:12px;display:flex;gap:10px;">
                     <button class="summarize-btn" onclick="addManualArticle()" id="manual-add-btn" style="padding:12px 24px;font-size:15px;">기사 추가</button>
                 </div>
@@ -1945,6 +1922,11 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
         await loadDailyNewsFromDB();
         renderDailyList();
     });
+
+    // 초기화: 기본값 설정
+    document.getElementById('manual-title').value = 'Anthropic Predicts Demand for Cowork Agent to Dwarf Claude Code';
+    document.getElementById('manual-body').value = "A top Anthropic PBC executive expects the company\\x27s general-purpose artificial intelligence agent, Cowork, to reach a wider market than Claude Code, the hit product that helped turn the startup into an AI juggernaut.\\n\\nAnthropic has seen stronger adoption for Cowork \\x22in the first few weeks\\x22 than it did in a comparable period for Claude Code a year ago, Chief Commercial Officer Paul Smith said in an interview on Wednesday. Smith said the average large company has somewhere between 2% and 5% of its staff working in engineering. Cowork, he said, is more likely to appeal to \\x22the rest of us.\\x22\\n\\nCowork was released as a \\x22research preview\\x22 product earlier this year and quickly made a splash online. Unlike with Claude Code, a similar AI agent for programming, Cowork does not require users to run a terminal and type in a command line. It\\x27s also meant to tackle a broader range of tasks, potentially appealing to a bigger audience.\\n\\nAnthropic has emerged as an AI leader and a fierce competitor of OpenAI in large part due to Claude Code, which the company recently said generates more than $2 billion in annualized revenue. With products like Cowork, Anthropic aims to help streamline a wider range of work tasks and replicate the success it\\x27s had with software developers.\\nAt the same time, Anthropic is competing with the likes of OpenAI and Alphabet Inc.\\x27s Google to build more advanced AI systems to power agents and other software. In the wide-ranging interview, Smith said he expects the rate of releases to accelerate.\\n\\n\\x22I think the pace of innovation is going to increase,\\x22 he said. \\x22It is a reasonably safe bet to assume that model releases will keep coming, and if anything, they will keep coming with more frequency.\\x22\\n\\nMoving faster comes with challenges, however. Smith said the recent accidental release of the source code behind Claude Code was the result of \\x22process errors\\x22 related to the startup\\x27s fast product release cycle.\\n\\nThe leak was \\x22absolutely not breaches or hacks,\\x22 he said, and the mistakes have been addressed. \\x22They\\x27re part of the incredibly rapid release cycle that we\\x27ve had around Claude Code,\\x22 he added.\\n\\nThe exposure hits at a delicate moment for the company. Anthropic is currently in a legal battle with the US government over the Pentagon\\x27s decision to declare it a supply-chain risk following a standoff over AI safety guardrails. The company has warned that the labeling could cost it billions in lost revenue.\\n\\nStill, Smith said some customers respect that Anthropic \\x22demonstrates its principles\\x22 in its dealings with the US government.\\n\\nAs Anthropic battles the Pentagon, it\\x27s also pushing ahead with plans to go public as soon as this year, Bloomberg News has reported. Smith declined to comment on the timeline for an initial public offering, but said Anthropic is \\x22very comfortable that we\\x27re on the right path from gross margin targets and the previous profitability targets that we\\x27ve stated.\\x22\\n\\nFor now, the company has a sizable war chest after finalizing a $30 billion funding round in February that can be used to spend on the costly chips, data centers and talent needed to compete in the global AI race.\\n\\n\\x22We\\x27re very comfortable with our funding situation after the recent round that we concluded,\\x22 he said.";
+    document.getElementById('manual-url').value = 'https://www.bloomberg.com/news/articles/2026-04-01/anthropic-executive-sees-cowork-agent-as-bigger-than-claude-code?srnd=phx-technology';
 
     // 초기화: 홈 화면 표시
     showSection('home');
