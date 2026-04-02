@@ -930,11 +930,22 @@ HTML_TEMPLATE = """
             <div class="content-header">
                 <h1>직접 입력</h1>
             </div>
-            <div style="padding:20px 0;">
+            <!-- URL 입력 -->
+            <div style="padding:20px 0 10px;">
                 <p style="color:#888;font-size:14px;margin-bottom:12px;">뉴스 URL을 한 줄에 하나씩 입력하세요 (최대 20개)</p>
-                <textarea id="custom-urls" rows="6" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box;" placeholder="https://example.com/news/article1&#10;https://example.com/news/article2">https://themiilk.com/articles/aeaf8dcc6?u=12eaa86b&amp;t=ab2139228&amp;from=</textarea>
+                <textarea id="custom-urls" rows="4" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box;" placeholder="https://example.com/news/article1&#10;https://example.com/news/article2"></textarea>
                 <div style="margin-top:12px;display:flex;gap:10px;">
-                    <button class="summarize-btn" onclick="fetchCustomUrls()" id="custom-fetch-btn" style="padding:12px 24px;font-size:15px;">기사 가져오기</button>
+                    <button class="summarize-btn" onclick="fetchCustomUrls()" id="custom-fetch-btn" style="padding:12px 24px;font-size:15px;">URL에서 기사 가져오기</button>
+                </div>
+            </div>
+            <!-- 제목/본문 직접 입력 -->
+            <div style="padding:10px 0 20px;border-top:1px solid #eee;margin-top:10px;">
+                <p style="color:#888;font-size:14px;margin-bottom:12px;">또는 제목과 본문을 직접 입력하세요</p>
+                <input id="manual-title" type="text" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;" placeholder="뉴스 제목">
+                <textarea id="manual-body" rows="8" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box;" placeholder="뉴스 본문 내용을 붙여넣으세요"></textarea>
+                <input id="manual-url" type="text" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;margin-top:8px;" placeholder="원문 URL (선택사항)">
+                <div style="margin-top:12px;display:flex;gap:10px;">
+                    <button class="summarize-btn" onclick="addManualArticle()" id="manual-add-btn" style="padding:12px 24px;font-size:15px;">기사 추가</button>
                 </div>
             </div>
             <div id="custom-articles"></div>
@@ -1112,7 +1123,47 @@ HTML_TEMPLATE = """
             document.getElementById('custom-articles').innerHTML = '<div class="error-msg">기사를 가져오는 중 오류가 발생했습니다.</div>';
         }
         btn.disabled = false;
-        btn.textContent = '기사 가져오기';
+        btn.textContent = 'URL에서 기사 가져오기';
+    }
+
+    // 제목/본문 직접 입력으로 기사 추가
+    async function addManualArticle() {
+        const titleInput = document.getElementById('manual-title');
+        const bodyInput = document.getElementById('manual-body');
+        const urlInput = document.getElementById('manual-url');
+        const title = titleInput.value.trim();
+        const body = bodyInput.value.trim();
+        const link = urlInput.value.trim();
+
+        if (!title) { alert('제목을 입력해주세요.'); return; }
+        if (!body) { alert('본문을 입력해주세요.'); return; }
+
+        const newArticle = {
+            title: title,
+            body: body,
+            link: link,
+            summary: '',
+            pub_date: '',
+            publisher: '직접 입력',
+            error: false,
+            paywall: false
+        };
+        articles.push(newArticle);
+
+        // DB에 저장
+        try {
+            await fetch('/api/save-custom-articles', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ articles: [newArticle], publisher: '직접 입력' })
+            });
+        } catch (e) {}
+
+        renderCustomArticles();
+        // 입력 필드 초기화
+        titleInput.value = '';
+        bodyInput.value = '';
+        urlInput.value = '';
     }
 
     // 직접 입력 기사 렌더링 (피드 기사와 동일한 형태)
@@ -1126,8 +1177,11 @@ HTML_TEMPLATE = """
         container.innerHTML = articles.map((a, i) => {
             if (a.error) {
                 return '<div class="result-item" style="opacity:0.6;">' +
-                    '<h2><a href="' + escapeHtml(a.link) + '" target="_blank">' + escapeHtml(a.link) + '</a></h2>' +
+                    '<h2><span>' + escapeHtml(a.link) + '</span></h2>' +
                     '<p style="color:#e74c3c;">' + escapeHtml(a.body) + '</p>' +
+                    '<div class="btn-row">' +
+                        '<a href="' + escapeHtml(a.link) + '" target="_blank" class="original-btn">원문 보기</a>' +
+                    '</div>' +
                 '</div>';
             }
             const isSelected = a.is_daily;
@@ -1135,7 +1189,7 @@ HTML_TEMPLATE = """
             const dateFormatted = formatPubDate(a.pub_date);
             return '<div class="result-item" id="article-' + i + '">' +
                 '<h2 style="display:flex;align-items:center;justify-content:space-between;gap:12px;">' +
-                    '<a href="' + escapeHtml(a.link) + '" target="_blank" style="flex:1;">' + escapeHtml(a.title) + '</a>' +
+                    '<span style="flex:1;">' + escapeHtml(a.title) + '</span>' +
                     (dateFormatted ? '<span class="article-date">' + dateFormatted + '</span>' : '') +
                     '<button class="daily-btn' + (isSelected ? ' selected' : '') + '" onclick="selectForDaily(' + i + ')" id="daily-btn-' + i + '">' + (isSelected ? '선택됨' : 'Daily News 로 선택') + '</button>' +
                 '</h2>' +
@@ -1193,7 +1247,7 @@ HTML_TEMPLATE = """
             const dateFormatted = formatPubDate(a.pub_date);
             return '<div class="result-item" id="article-' + i + '">' +
                 '<h2 style="display:flex;align-items:center;justify-content:space-between;gap:12px;">' +
-                    '<a href="' + escapeHtml(a.link) + '" target="_blank" style="flex:1;">' + escapeHtml(a.title) + '</a>' +
+                    '<span style="flex:1;">' + escapeHtml(a.title) + '</span>' +
                     (dateFormatted ? '<span class="article-date">' + dateFormatted + '</span>' : '') +
                     '<button class="daily-btn' + (isSelected ? ' selected' : '') + '" onclick="selectForDaily(' + i + ')" id="daily-btn-' + i + '">' + (isSelected ? '선택됨' : 'Daily News 로 선택') + '</button>' +
                 '</h2>' +
