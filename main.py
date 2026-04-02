@@ -1052,6 +1052,15 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
         return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
+    function extractPublisher(url) {
+        if (!url) return '직접 입력';
+        try {
+            var host = new URL(url).hostname.replace('www.', '');
+            var name = host.split('.')[0];
+            return name.charAt(0).toUpperCase() + name.slice(1);
+        } catch (e) { return '직접 입력'; }
+    }
+
     // Daily News 관리 (DB 기반)
     var dailyNewsCache = [];
 
@@ -1148,21 +1157,10 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
                 link: a.link,
                 summary: '',
                 pub_date: a.pub_date || '',
-                publisher: '직접 입력',
+                publisher: extractPublisher(a.link),
                 error: a.error,
                 paywall: a.paywall
             }));
-            // DB에 저장
-            if (articles.length > 0) {
-                const validArticles = articles.filter(a => !a.error);
-                if (validArticles.length > 0) {
-                    await fetch('/api/save-custom-articles', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ articles: validArticles, publisher: '직접 입력' })
-                    });
-                }
-            }
             renderCustomArticles('custom-url-articles');
         } catch (e) {
             document.getElementById('custom-url-articles').innerHTML = '<div class="error-msg">기사를 가져오는 중 오류가 발생했습니다.</div>';
@@ -1189,21 +1187,11 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
             link: link,
             summary: '',
             pub_date: '',
-            publisher: '직접 입력',
+            publisher: extractPublisher(link),
             error: false,
             paywall: false
         };
         articles.push(newArticle);
-
-        // DB에 저장
-        try {
-            await fetch('/api/save-custom-articles', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ articles: [newArticle], publisher: '직접 입력' })
-            });
-        } catch (e) {}
-
         renderCustomArticles('custom-manual-articles');
         // 입력 필드 초기화
         titleInput.value = '';
@@ -1349,9 +1337,20 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
         // DB에서 로드된 요약 또는 화면에 표시된 요약 확인
         const existingSummary = (article.summary && article.summary.trim().length > 0) ? article.summary :
             (summaryDiv.classList.contains('visible') ? contentDiv.textContent : null);
+        const publisher = currentFeedName === '직접 입력' ? extractPublisher(article.link) : currentFeedName;
 
         if (existingSummary && existingSummary !== 'AI가 요약하는 중입니다...' && existingSummary !== '요약 중 오류가 발생했습니다.') {
             btn.disabled = true;
+            // 직접 입력 기사는 DB에 먼저 저장
+            if (currentFeedName === '직접 입력') {
+                try {
+                    await fetch('/api/save-custom-articles', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ articles: [article], publisher: publisher })
+                    });
+                } catch (e) {}
+            }
             // 영문 요약이 없으면 요약 실행
             if (!article.summary_eng) {
                 btn.textContent = '영문 요약 중...';
@@ -1359,7 +1358,7 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
                     const res = await fetch('/api/summarize', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ title: article.title, body: article.body, link: article.link, publisher: currentFeedName })
+                        body: JSON.stringify({ title: article.title, body: article.body, link: article.link, publisher: publisher })
                     });
                     const data = await res.json();
                     if (data.summary) { articles[idx].summary = data.summary; var cd = document.querySelector('#summary-' + idx + ' .summary-content'); if (cd) cd.textContent = data.summary; }
@@ -1400,10 +1399,18 @@ For now, the company has a sizable war chest after finalizing a $30 billion fund
         contentDiv.textContent = 'AI가 요약하는 중입니다...';
 
         try {
+            // 직접 입력 기사는 DB에 먼저 저장
+            if (currentFeedName === '직접 입력') {
+                await fetch('/api/save-custom-articles', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ articles: [article], publisher: publisher })
+                });
+            }
             const res = await fetch('/api/summarize', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: article.title, body: article.body, link: article.link, publisher: currentFeedName })
+                body: JSON.stringify({ title: article.title, body: article.body, link: article.link, publisher: publisher })
             });
             const data = await res.json();
             contentDiv.textContent = data.summary;
